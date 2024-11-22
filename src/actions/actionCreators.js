@@ -12,3 +12,13 @@ export const updateInput = (inputValue) => ({
   type: TYPE.UPDATE_INPUT,
   payload: inputValue,
 });
+
+export const requestRide = (rideDetails) => ({
+  type: TYPE.REQUEST_RIDE,
+  payload: rideDetails,
+});
+
+export const acceptRide = (rideId) => ({
+  type: TYPE.ACCEPT_RIDE,
+  payload: rideId,
+});
