@@ -1,5 +1,5 @@
 
-### How to test this template module
+### How to test this module
 
 1. Download and install the [latest version of Nexus Wallet](https://github.com/Nexusoft/NexusInterface/releases/latest) if you haven't.
 2. Download [this template module's zip file](https://github.com/Nexusoft/react_redux_module_template/releases/latest).
