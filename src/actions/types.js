@@ -2,3 +2,6 @@ export const SHOW_CONNECTIONS = 'SHOW_CONNECTIONS';
 export const HIDE_CONNECTIONS = 'HIDE_CONNECTIONS';
 
 export const UPDATE_INPUT = 'UPDATE_INPUT';
+
+export const REQUEST_RIDE = 'REQUEST_RIDE';
+export const ACCEPT_RIDE = 'ACCEPT_RIDE';
