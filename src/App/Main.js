@@ -69,116 +69,23 @@ export default function Main() {
   };
 
   return (
-    <Panel title="React Redux Module" icon={{ url: 'react.svg', id: 'icon' }}>
-      <div className="text-center">
-        Check out{' '}
-        <Button
-          skin="hyperlink"
-          as="a"
-          href="https://github.com/Nexusoft/NexusInterface/tree/master/docs/Modules"
-        >
-          Developer's guide to Nexus Wallet Module
-        </Button>{' '}
-        for documentation and API reference.
+    <Panel title="NexGo" icon={{ url: 'react.svg', id: 'icon' }}>
+      <div className="Overview">
+        <h1>Welcome to NexGo</h1>
+        <p>
+          This is a taxi renting module built on top of the Nexus Wallet's
+          module system.
+        </p>
+        <p>
+          You can find available rides on the map and request a ride to 
+          pick you up at your location, and pay with NXS.
+        </p>
       </div>
 
-      <div className="mt2 flex center">
-        <FieldSet legend="Module storage">
-          <p>
-            <strong>Module storage</strong> is a feature that allows modules to
-            save data (module's settings for example) into a file so that it
-            won't be lost when user closes their wallet.
-          </p>
-          <p>
-            The on/off state of the switch below will be saved to a file using{' '}
-            <Button
-              skin="hyperlink"
-              as="a"
-              href="https://github.com/Nexusoft/NexusInterface/blob/master/docs/Modules/nexus-global-variable.md#updatestorage"
-            >
-              updateStorage
-            </Button>{' '}
-            utility function. Try switching it and restart your wallet to see if
-            the switch state is retained.
-          </p>
-          <Tooltip.Trigger
-            position="right"
-            tooltip="Click me then restart wallet"
-          >
-            <Switch checked={showingConnections} onChange={confirmToggle} />
-          </Tooltip.Trigger>
-        </FieldSet>
-      </div>
-
-      <div className="mt2">
-        <FieldSet legend="Module state">
-          <p>
-            Since your module is embedded inside a &lt;webview&gt; tag, normally
-            when user navigates away from your module page, the &lt;Webview&gt;
-            will be unmounted and all your module state will be lost.{' '}
-            <strong>Module state</strong> is a feature that allows modules to
-            save temporary state data on the base wallet so that it won't be
-            lost when user navigates away from the module.
-          </p>
-          <p>
-            The content of the textbox below will be saved to base wallet's
-            state using{' '}
-            <Button
-              skin="hyperlink"
-              as="a"
-              href="https://github.com/Nexusoft/NexusInterface/blob/master/docs/Modules/nexus-global-variable.md#updatestate"
-            >
-              updateState
-            </Button>{' '}
-            utility function. Try filling it out then switch to Overview and
-            switch back to see if the content is still there.
-          </p>
-          <DemoTextField
-            value={inputValue}
-            onChange={handleChange}
-            placeholder="Type anything here"
-          />
-        </FieldSet>
-      </div>
-
-      <div className="mt2 flex center">
-        <FieldSet legend="Live updated data">
-          <p>
-            Core information, user status, local address book, wallet theme and
-            settings will be fed into your module when your module is
-            initialized and when those data are changed.
-          </p>
-          {!!showingConnections && (
-            <div className="mt1">
-              Core connections:{' '}
-              <strong>
-                {coreInfo ? coreInfo.connections : 'Not connected'}
-              </strong>
-            </div>
-          )}
-          <div>
-            User status:{' '}
-            <strong>{userStatus ? 'Logged in' : 'Not logged in'}</strong>
-          </div>
-        </FieldSet>
-      </div>
-
-      <div className="mt2">
-        <FieldSet legend="API calls">
-          <p>
-            You can make API calls from your module to the Nexus Core using{' '}
-            <Button
-              skin="hyperlink"
-              as="a"
-              href="https://github.com/Nexusoft/NexusInterface/blob/master/docs/Modules/nexus-global-variable.md#apicall"
-            >
-              apiCall
-            </Button>{' '}
-            utility function. Click the button below to view blockchain metrics.
-          </p>
-          <Button onClick={viewMetrics} disabled={checkingMetrics}>
-            View blockchain metrics
-          </Button>
+      <div className="Map">
+        <FieldSet legend="Module">
+          <Map /> {/* Display the map */}
+          {/* Add UI for requesting and accepting rides */}
         </FieldSet>
       </div>
     </Panel>
