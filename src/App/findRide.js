@@ -1,7 +1,7 @@
 import { FieldSet } from 'nexus-module';
 import Map from './Map';
 
-export default function findRide() {
+export default function FindRide() {
   return (
     <>
       <div className="Overview">
@@ -18,7 +18,7 @@ export default function findRide() {
 
       <div className="Map">
         <FieldSet legend="Module">
-          <Map /> {/* Display the map */}
+          <Map /> 
           {/* Add UI for requesting and accepting rides */}
         </FieldSet>
       </div>
