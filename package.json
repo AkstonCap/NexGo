@@ -18,7 +18,9 @@
     "cross-env": "^7.0.3",
     "webpack": "^5.73.0",
     "webpack-cli": "^4.10.0",
-    "webpack-dev-server": "^4.9.3"
+    "webpack-dev-server": "^4.9.3",
+    "css-loader": "^6.5.0",
+    "style-loader": "^3.3.1"
   },
   "scripts": {
     "build": "cross-env NODE_ENV=production webpack --config webpack.config.babel.js",
@@ -28,6 +30,8 @@
     "nexus-module": "^1.0.0-alpha.9",
     "react-redux": "^8.0.2",
     "redux": "^4.2.0",
+    "redux-thunk": "^2.4.1",
+    "react": "^18.0.0",
     "react-dom": "^18.3.1",
     "leaflet": "^1.9.4",
     "react-leaflet": "^4.2.1",
@@ -35,6 +39,8 @@
     "lucide-react": "^0.344.0",
     "react-select": "^5.4.0",
     "leaflet-routing-machine": "3.2.12",
-    "react-leaflet-routing-machine": "^3.0.0"
+    "react-leaflet-routing-machine": "^1.0.0",
+    "react-scripts": "^1.1.4",
+    "lrm-google": "1.0.1"
     }
 }
