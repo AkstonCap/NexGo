@@ -32,6 +32,9 @@
     "leaflet": "^1.9.4",
     "react-leaflet": "^4.2.1",
     "clsx": "^2.1.0",
-    "lucide-react": "^0.344.0"
+    "lucide-react": "^0.344.0",
+    "react-select": "^5.4.0",
+    "leaflet-routing-machine": "3.2.12",
+    "react-leaflet-routing-machine": "^3.0.0"
     }
 }

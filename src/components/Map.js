@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import 'leaflet-routing-machine/dist/leaflet-routing-machine.css';
+import RoutingMachine from './RoutingMachine';
 
 // Fix default icon issue with Leaflet
 delete L.Icon.Default.prototype._getIconUrl;
@@ -11,7 +13,7 @@ L.Icon.Default.mergeOptions({
   shadowUrl: require('leaflet/dist/images/marker-shadow.png'),
 });
 
-export default function Map() {
+export default function Map({ destination }) {
   const [position, setPosition] = useState(null);
 
   useEffect(() => {
@@ -37,6 +39,9 @@ export default function Map() {
           <Marker position={position}>
             <Popup>You are here</Popup>
           </Marker>
+          {destination && (
+            <RoutingMachine userPosition={position} destination={destination.value} />
+          )}
         </MapContainer>
       )}
     </div>

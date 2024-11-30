@@ -1,7 +1,34 @@
+import { useState } from 'react';
 import { FieldSet } from 'nexus-module';
-import Map from './Map';
+import AsyncSelect from 'react-select/async';
+import Map from 'components/Map';
+
+const loadOptions = (inputValue, callback) => {
+  fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${inputValue}`)
+    .then((response) => response.json())
+    .then((data) => {
+      const options = data.map((item) => ({
+        label: item.display_name,
+        value: {
+          lat: item.lat,
+          lon: item.lon,
+        },
+      }));
+      callback(options);
+    })
+    .catch((error) => {
+      console.error('Error fetching address suggestions:', error);
+      callback([]);
+    });
+};
 
 export default function FindRide() {
+  const [destination, setDestination] = useState(null);
+
+  const handleDestinationChange = (selectedOption) => {
+    setDestination(selectedOption);
+  };
+  
   return (
     <>
       <div className="Overview">
@@ -17,10 +44,15 @@ export default function FindRide() {
       </div>
 
       <div className="Map">
-        <FieldSet legend="Module">
-          <Map /> 
-          {/* Add UI for requesting and accepting rides */}
+        <FieldSet legend="Find a Ride">
+          <AsyncSelect
+            cacheOptions
+            loadOptions={loadOptions}
+            onChange={handleDestinationChange}
+            placeholder="Enter destination"
+          />
         </FieldSet>
+        <Map destination={destination} />
       </div>
     </>
   );

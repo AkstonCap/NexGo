@@ -16,8 +16,6 @@ import {
 } from 'nexus-module';
 
 import {
-  showConnections,
-  hideConnections,
   updateInput,
   switchTab,
 } from 'actions/actionCreators';
