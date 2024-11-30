@@ -22,3 +22,8 @@ export const acceptRide = (rideId) => ({
   type: TYPE.ACCEPT_RIDE,
   payload: rideId,
 });
+
+export const switchTab = (tab) => ({
+  type: TYPE.SWITCH_TAB,
+  payload: tab,
+});

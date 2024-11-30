@@ -5,3 +5,5 @@ export const UPDATE_INPUT = 'UPDATE_INPUT';
 
 export const REQUEST_RIDE = 'REQUEST_RIDE';
 export const ACCEPT_RIDE = 'ACCEPT_RIDE';
+
+export const SWITCH_TAB = 'SWITCH_TAB';

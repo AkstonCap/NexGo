@@ -19,10 +19,11 @@ import {
   showConnections,
   hideConnections,
   updateInput,
+  switchTab,
 } from 'actions/actionCreators';
 
-import drive from './drive';
-import findRide from './findRide';
+import Drive from './drive';
+import FindRide from './findRide';
 
 const DemoTextField = styled(TextField)({
   maxWidth: 400,
@@ -34,14 +35,13 @@ export default function Main() {
   const inputValue = useSelector((state) => state.ui.inputValue);
   const activeTab = useSelector((state) => state.ui.activeTab);
   const dispatch = useDispatch();
+
   const handleChange = (e) => {
     dispatch(updateInput(e.target.value));
   };
-  const switchTab = (tab) => {
-    dispatch({
-      type: TYPE.SWITCH_TAB,
-      payload: tab,
-    });
+
+  const handleSwitchTab = (tab) => {
+    dispatch(switchTab(tab));
   };
 
   return (
@@ -49,24 +49,20 @@ export default function Main() {
       <HorizontalTab.TabBar>
         <HorizontalTab
           active={activeTab === 'FindRide'}
-          onClick={() => {
-            switchTab('FindRide');
-          }}
+          onClick={() => handleSwitchTab('FindRide')}
         >
           Find Ride
         </HorizontalTab>
         <HorizontalTab
           active={activeTab === 'Drive'}
-          onClick={() => {
-            switchTab('Drive');
-          }}
+          onClick={() => handleSwitchTab('Drive')}
         >
           Drive
         </HorizontalTab>
       </HorizontalTab.TabBar>
       
-      <div>{activeTab === 'FindRide' && <findRide />}</div>
-      <div>{activeTab === 'Drive' && <drive />}</div>
+      <div>{activeTab === 'FindRide' && <FindRide />}</div>
+      <div>{activeTab === 'Drive' && <Drive />}</div>
     </Panel>
   );
 }
