@@ -6,8 +6,8 @@
   "description": "Decentralized taxi hiring service on Nexus blockchain. Drivers broadcast GPS positions on-chain, passengers find nearby available taxis in real-time.",
   "type": "app",
   "entry": "dist/index.html",
-  "icon": "dist/react.svg",
-  "files": ["dist/index.html", "dist/react.svg", "dist/js/app.js"],
+  "icon": "dist/nexgo-logo.svg",
+  "files": ["dist/index.html", "dist/nexgo-logo.svg", "dist/js/app.js"],
   "author": {
     "name": "AkstonCap"
   }

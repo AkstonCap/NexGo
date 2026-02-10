@@ -4,5 +4,5 @@
   "description": "Decentralized taxi hiring service on Nexus blockchain. Development mode.",
   "type": "app",
   "entry": "http://localhost:24011/dev.html",
-  "icon": "dist/react.svg"
+  "icon": "dist/nexgo-logo.svg"
 }

@@ -45,7 +45,7 @@ export default function Main() {
   };
 
   return (
-    <Panel title="NexGo" icon={{ url: 'react.svg', id: 'icon' }}>
+    <Panel title="NexGo" icon={{ url: 'nexgo-logo.svg', id: 'icon' }}>
       <HorizontalTab.TabBar>
         <HorizontalTab
           active={activeTab === 'Passenger'}
