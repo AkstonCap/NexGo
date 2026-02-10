@@ -1,4 +1,4 @@
-import { apiCall } from 'nexus-module';
+import { apiCall, secureApiCall } from 'nexus-module';
 
 // Distordia on-chain asset schema for nexgo-taxi (JSON format, <1KB)
 // Fields follow Distordia standard: distordia-type identifies the asset category
@@ -84,9 +84,9 @@ export async function createTaxiAsset({ vehicleId, vehicleType, position }) {
     }
   });
 
-  return await apiCall('assets/create/asset', {
+  return await secureApiCall('assets/create/asset', {
     name: `nexgo-taxi-${vehicleId}`,
-    format: 'json',
+    format: 'JSON',
     json,
   });
 }
@@ -97,6 +97,7 @@ export async function createTaxiAsset({ vehicleId, vehicleType, position }) {
 export async function updateTaxiAsset({ vehicleId, vehicleType, status, position }) {
   const params = {
     name: `nexgo-taxi-${vehicleId}`,
+    format: 'basic',
   };
 
   if (vehicleType) params['vehicle-type'] = vehicleType;
@@ -107,7 +108,7 @@ export async function updateTaxiAsset({ vehicleId, vehicleType, status, position
   }
   params.timestamp = new Date().toISOString();
 
-  return await apiCall('assets/update/asset', params);
+  return await secureApiCall('assets/update/asset', params);
 }
 
 // Fetch all nexgo-taxi assets from the blockchain (public, no auth required)
@@ -115,7 +116,7 @@ export async function updateTaxiAsset({ vehicleId, vehicleType, status, position
 // Uses Distordia standard where clause to filter by distordia-type
 export async function fetchTaxisFromChain() {
   const result = await apiCall('register/list/assets:asset', {
-    where: 'results.distordia-type=nexgo-taxi AND results.status!=offline',
+    where: "results.distordia-type=nexgo-taxi AND results.status!=offline",
     limit: 100,
   });
 
@@ -149,7 +150,7 @@ export async function getTaxiAsset(vehicleId) {
 export async function listMyTaxiAssets() {
   try {
     const result = await apiCall('assets/list/asset', {
-      where: 'results.distordia-type=nexgo-taxi',
+      where: "results.distordia-type=nexgo-taxi",
     });
     return Array.isArray(result) ? result : [];
   } catch (error) {
