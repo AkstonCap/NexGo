@@ -39,8 +39,6 @@
     "lucide-react": "^0.344.0",
     "react-select": "^5.4.0",
     "leaflet-routing-machine": "3.2.12",
-    "react-leaflet-routing-machine": "^1.0.0",
-    "react-scripts": "^1.1.4",
-    "lrm-google": "1.0.1"
+    "react-scripts": "^1.1.4"
     }
 }

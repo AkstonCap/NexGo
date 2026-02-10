@@ -1,42 +1,44 @@
-import { useState } from 'react';
-import styled from '@emotion/styled';
+import { useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import {
   Panel,
   HorizontalTab,
-  Switch,
-  Tooltip,
-  TextField,
-  Button,
-  FieldSet,
-  confirm,
-  apiCall,
-  showErrorDialog,
-  showSuccessDialog,
 } from 'nexus-module';
 
 import {
-  updateInput,
   switchTab,
+  fetchTaxis,
+  setUserPosition,
 } from 'actions/actionCreators';
 
-import Drive from './drive';
-import FindRide from './findRide';
-
-const DemoTextField = styled(TextField)({
-  maxWidth: 400,
-});
+import Passenger from './Passenger';
+import Driver from './Driver';
 
 export default function Main() {
-  const coreInfo = useSelector((state) => state.nexus.coreInfo);
-  const userStatus = useSelector((state) => state.nexus.userStatus);
-  const inputValue = useSelector((state) => state.ui.inputValue);
   const activeTab = useSelector((state) => state.ui.activeTab);
   const dispatch = useDispatch();
 
-  const handleChange = (e) => {
-    dispatch(updateInput(e.target.value));
-  };
+  useEffect(() => {
+    // Get user location on mount
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          dispatch(
+            setUserPosition({
+              lat: pos.coords.latitude,
+              lng: pos.coords.longitude,
+            })
+          );
+        },
+        (err) => {
+          console.error('Geolocation error:', err);
+        },
+        { enableHighAccuracy: true }
+      );
+    }
+    // Initial taxi fetch
+    dispatch(fetchTaxis());
+  }, []);
 
   const handleSwitchTab = (tab) => {
     dispatch(switchTab(tab));
@@ -46,21 +48,21 @@ export default function Main() {
     <Panel title="NexGo" icon={{ url: 'react.svg', id: 'icon' }}>
       <HorizontalTab.TabBar>
         <HorizontalTab
-          active={activeTab === 'FindRide'}
-          onClick={() => handleSwitchTab('FindRide')}
+          active={activeTab === 'Passenger'}
+          onClick={() => handleSwitchTab('Passenger')}
         >
-          Find Ride
+          Passenger
         </HorizontalTab>
         <HorizontalTab
-          active={activeTab === 'Drive'}
-          onClick={() => handleSwitchTab('Drive')}
+          active={activeTab === 'Driver'}
+          onClick={() => handleSwitchTab('Driver')}
         >
-          Drive
+          Driver
         </HorizontalTab>
       </HorizontalTab.TabBar>
-      
-      <div>{activeTab === 'FindRide' && <FindRide />}</div>
-      <div>{activeTab === 'Drive' && <Drive />}</div>
+
+      <div>{activeTab === 'Passenger' && <Passenger />}</div>
+      <div>{activeTab === 'Driver' && <Driver />}</div>
     </Panel>
   );
 }
