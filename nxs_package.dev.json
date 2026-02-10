@@ -1,7 +1,7 @@
 {
-  "name": "_dev_react_redux_module_template",
-  "displayName": "React Redux Module Development",
-  "description": "A Nexus Wallet Module template built with React and Redux, also includes boilerplate code and example usages of some Nexus Wallet Module's advanced features",
+  "name": "_dev_nexgo",
+  "displayName": "NexGo Development",
+  "description": "Decentralized taxi hiring service on Nexus blockchain. Development mode.",
   "type": "app",
   "entry": "http://localhost:24011/dev.html",
   "icon": "dist/react.svg"
