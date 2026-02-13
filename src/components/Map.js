@@ -1,5 +1,12 @@
-import { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { useEffect } from 'react';
+import {
+  MapContainer,
+  TileLayer,
+  Marker,
+  Popup,
+  useMap,
+  useMapEvents,
+} from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-routing-machine/dist/leaflet-routing-machine.css';
@@ -13,6 +20,11 @@ L.Icon.Default.mergeOptions({
   iconUrl: require('leaflet/dist/images/marker-icon.png'),
   shadowUrl: require('leaflet/dist/images/marker-shadow.png'),
 });
+
+// Default center when no position is available (world view)
+const DEFAULT_CENTER = [20, 0];
+const DEFAULT_ZOOM = 2;
+const LOCATED_ZOOM = 14;
 
 // Custom icons for taxi markers matching the web version
 function createTaxiIcon(status) {
@@ -32,58 +44,83 @@ const userIcon = L.divIcon({
   iconAnchor: [15, 30],
 });
 
-export default function Map({ destination, taxis = [], userPosition }) {
-  const [position, setPosition] = useState(null);
-
+// Re-centers the map when position changes
+function MapUpdater({ position }) {
+  const map = useMap();
   useEffect(() => {
-    if (userPosition) {
-      setPosition([userPosition.lat, userPosition.lng]);
-    } else if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setPosition([pos.coords.latitude, pos.coords.longitude]);
-        },
-        (err) => {
-          console.error(err);
-        }
-      );
+    if (position) {
+      map.setView(position, Math.max(map.getZoom(), LOCATED_ZOOM));
     }
-  }, [userPosition]);
+  }, [position, map]);
+  return null;
+}
+
+// Handles click-to-set-position on the map
+function ClickHandler({ onPositionSelect }) {
+  useMapEvents({
+    click(e) {
+      if (onPositionSelect) {
+        onPositionSelect({ lat: e.latlng.lat, lng: e.latlng.lng });
+      }
+    },
+  });
+  return null;
+}
+
+export default function Map({
+  destination,
+  taxis = [],
+  userPosition,
+  onPositionSelect,
+}) {
+  const position = userPosition
+    ? [userPosition.lat, userPosition.lng]
+    : null;
+
+  const center = position || DEFAULT_CENTER;
+  const zoom = position ? LOCATED_ZOOM : DEFAULT_ZOOM;
 
   return (
     <div id="map" style={{ height: '500px', width: '100%', position: 'relative' }}>
-      {position && (
-        <MapContainer
-          center={position}
-          zoom={14}
-          style={{ height: '100%', width: '100%' }}
-        >
-          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+      <MapContainer
+        center={center}
+        zoom={zoom}
+        style={{ height: '100%', width: '100%' }}
+      >
+        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+        <MapUpdater position={position} />
+        {onPositionSelect && <ClickHandler onPositionSelect={onPositionSelect} />}
+        {position && (
           <Marker position={position} icon={userIcon}>
             <Popup>Your Location</Popup>
           </Marker>
-          {taxis.map((taxi) => (
-            <Marker
-              key={taxi.id}
-              position={[taxi.lat, taxi.lng]}
-              icon={createTaxiIcon(taxi.status)}
-            >
-              <Popup>
-                <strong>{taxi.vehicleId}</strong>
-                <br />
-                Status: {taxi.status}
-                <br />
-                Type: {taxi.type}
-              </Popup>
-            </Marker>
-          ))}
-          {destination && (
-            <RoutingMachine
-              userPosition={position}
-              destination={destination.value}
-            />
-          )}
-        </MapContainer>
+        )}
+        {taxis.map((taxi) => (
+          <Marker
+            key={taxi.id}
+            position={[taxi.lat, taxi.lng]}
+            icon={createTaxiIcon(taxi.status)}
+          >
+            <Popup>
+              <strong>{taxi.vehicleId}</strong>
+              <br />
+              Status: {taxi.status}
+              <br />
+              Type: {taxi.type}
+            </Popup>
+          </Marker>
+        ))}
+        {destination && position && (
+          <RoutingMachine
+            userPosition={position}
+            destination={destination.value}
+          />
+        )}
+      </MapContainer>
+      {!position && onPositionSelect && (
+        <div className="map-click-hint">
+          Click on the map to set your location
+        </div>
       )}
       <div className="map-legend">
         <span className="legend-item">
