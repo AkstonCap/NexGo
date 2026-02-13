@@ -1,7 +1,7 @@
 {
   "name": "nexgo_wallet_module",
   "displayName": "NexGo",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "targetWalletVersion": "3.1.5",
   "description": "Decentralized taxi hiring service on Nexus blockchain. Drivers broadcast GPS positions on-chain, passengers find nearby available taxis in real-time.",
   "type": "app",

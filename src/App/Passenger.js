@@ -3,7 +3,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { FieldSet, Button } from 'nexus-module';
 import AsyncSelect from 'react-select/async';
 import Map from 'components/Map';
-import { fetchTaxis } from 'actions/actionCreators';
+import { fetchTaxis, setUserPosition } from 'actions/actionCreators';
 import { calculateDistance } from 'api/nexusAPI';
 
 const REFRESH_INTERVAL = 10000; // 10 seconds, matching web version
@@ -94,6 +94,7 @@ export default function Passenger() {
         destination={destination}
         taxis={taxis}
         userPosition={userPosition}
+        onPositionSelect={(pos) => dispatch(setUserPosition(pos))}
       />
 
       <div style={{ marginTop: 16 }}>

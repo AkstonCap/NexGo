@@ -7,6 +7,7 @@ import {
   showErrorDialog,
   showSuccessDialog,
 } from 'nexus-module';
+import AsyncSelect from 'react-select/async';
 import Map from 'components/Map';
 import {
   setVehicleId,
@@ -22,6 +23,27 @@ import {
 } from 'actions/actionCreators';
 
 const UPDATE_INTERVAL = 30000; // 30 seconds, matching web version
+
+const loadLocationOptions = (inputValue, callback) => {
+  fetch(
+    `https://nominatim.openstreetmap.org/search?format=json&q=${inputValue}`
+  )
+    .then((response) => response.json())
+    .then((data) => {
+      const options = data.map((item) => ({
+        label: item.display_name,
+        value: {
+          lat: parseFloat(item.lat),
+          lng: parseFloat(item.lon),
+        },
+      }));
+      callback(options);
+    })
+    .catch((error) => {
+      console.error('Error fetching address suggestions:', error);
+      callback([]);
+    });
+};
 
 export default function Driver() {
   const vehicleId = useSelector((state) => state.settings.vehicleId);
@@ -45,6 +67,8 @@ export default function Driver() {
   // Update GPS position periodically when broadcasting
   useEffect(() => {
     if (!broadcasting) return;
+
+    if (!navigator.geolocation) return;
 
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
@@ -113,7 +137,10 @@ export default function Driver() {
       return;
     }
     if (!userPosition) {
-      showErrorDialog({ message: 'Waiting for GPS location...' });
+      showErrorDialog({
+        message:
+          'Location not set. Search for an address or click on the map to set your position.',
+      });
       return;
     }
 
@@ -185,6 +212,16 @@ export default function Driver() {
       showErrorDialog({
         message: `Failed to update asset: ${error.message}`,
       });
+    }
+  };
+
+  const handlePositionSelect = (pos) => {
+    dispatch(setUserPosition(pos));
+  };
+
+  const handleLocationSearch = (opt) => {
+    if (opt && opt.value) {
+      dispatch(setUserPosition(opt.value));
     }
   };
 
@@ -320,17 +357,37 @@ export default function Driver() {
       </FieldSet>
 
       <FieldSet legend="Location">
+        <div style={{ marginBottom: 8 }}>
+          <AsyncSelect
+            cacheOptions
+            loadOptions={loadLocationOptions}
+            onChange={handleLocationSearch}
+            placeholder="Search for your location..."
+            styles={{
+              control: (base) => ({ ...base, marginBottom: 4 }),
+            }}
+          />
+          <div style={{ fontSize: 11, opacity: 0.5 }}>
+            Or click directly on the map below to set your position.
+          </div>
+        </div>
         {userPosition ? (
-          <div style={{ fontSize: 13 }}>
+          <div style={{ fontSize: 13, marginBottom: 8 }}>
             <div>
               Lat: {userPosition.lat.toFixed(6)}, Lng:{' '}
               {userPosition.lng.toFixed(6)}
             </div>
           </div>
         ) : (
-          <div style={{ opacity: 0.6 }}>Waiting for GPS...</div>
+          <div style={{ opacity: 0.6, marginBottom: 8 }}>
+            Location not set. Use the search above or click on the map.
+          </div>
         )}
-        <Map userPosition={userPosition} taxis={[]} />
+        <Map
+          userPosition={userPosition}
+          taxis={[]}
+          onPositionSelect={handlePositionSelect}
+        />
       </FieldSet>
 
       <FieldSet legend="On-Chain Asset Management">
