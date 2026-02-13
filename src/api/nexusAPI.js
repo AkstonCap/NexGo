@@ -25,6 +25,13 @@ export const TAXI_ASSET_SCHEMA = [
     maxlength: 64,
   },
   {
+    name: 'price-per-km',
+    type: 'string',
+    value: '0',
+    mutable: true,
+    maxlength: 64,
+  },
+  {
     name: 'status',
     type: 'string',
     value: 'offline',
@@ -52,33 +59,26 @@ export const TAXI_ASSET_SCHEMA = [
     mutable: true,
     maxlength: 128,
   },
-  {
-    name: 'timestamp',
-    type: 'string',
-    value: '',
-    mutable: true,
-    maxlength: 64,
-  },
 ];
 
 // Create a new taxi asset on-chain using Nexus Assets API (JSON format)
 // Endpoint: assets/create/asset
 // Requires authenticated session (user must be logged in to wallet)
-export async function createTaxiAsset({ vehicleId, vehicleType, position }) {
+export async function createTaxiAsset({ vehicleId, vehicleType, position, pricePerKm }) {
   const json = TAXI_ASSET_SCHEMA.map((field) => {
     switch (field.name) {
       case 'vehicle-id':
         return { ...field, value: vehicleId };
       case 'vehicle-type':
         return { ...field, value: vehicleType };
+      case 'price-per-km':
+        return { ...field, value: pricePerKm != null ? pricePerKm.toString() : '0' };
       case 'latitude':
         return { ...field, value: position ? position.lat.toString() : '0' };
       case 'longitude':
         return { ...field, value: position ? position.lng.toString() : '0' };
       case 'status':
         return { ...field, value: 'available' };
-      case 'timestamp':
-        return { ...field, value: new Date().toISOString() };
       default:
         return field;
     }
@@ -94,7 +94,7 @@ export async function createTaxiAsset({ vehicleId, vehicleType, position }) {
 // Update an existing taxi asset on-chain
 // Endpoint: assets/update/asset
 // Only mutable fields can be updated
-export async function updateTaxiAsset({ vehicleId, vehicleType, status, position }) {
+export async function updateTaxiAsset({ vehicleId, vehicleType, status, position, pricePerKm }) {
   const params = {
     name: `nexgo-taxi-${vehicleId}`,
     format: 'basic',
@@ -102,11 +102,11 @@ export async function updateTaxiAsset({ vehicleId, vehicleType, status, position
 
   if (vehicleType) params['vehicle-type'] = vehicleType;
   if (status) params.status = status;
+  if (pricePerKm != null) params['price-per-km'] = pricePerKm.toString();
   if (position) {
     params.latitude = position.lat.toString();
     params.longitude = position.lng.toString();
   }
-  params.timestamp = new Date().toISOString();
 
   return await secureApiCall('assets/update/asset', params);
 }
@@ -128,6 +128,7 @@ export async function fetchTaxisFromChain() {
       status: asset.status || 'available',
       lat: parseFloat(asset.latitude) || 0,
       lng: parseFloat(asset.longitude) || 0,
+      pricePerKm: parseFloat(asset['price-per-km']) || 0,
       driver: asset.driver || 'Unknown Driver',
       lastUpdate: asset.modified,
       name: asset.name,
