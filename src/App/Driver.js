@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import {
   FieldSet,
@@ -17,12 +17,9 @@ import {
   setUserPosition,
   createAsset,
   updateAsset,
-  broadcastPosition,
   loadDriverAsset,
   fetchTaxis,
 } from 'actions/actionCreators';
-
-const UPDATE_INTERVAL = 30000; // 30 seconds, matching web version
 
 const loadLocationOptions = (inputValue, callback) => {
   fetch(
@@ -57,14 +54,13 @@ export default function Driver() {
   );
   const userStatus = useSelector((state) => state.nexus.userStatus);
   const dispatch = useDispatch();
-  const broadcastRef = useRef(null);
 
   // Load driver's existing asset on mount
   useEffect(() => {
     dispatch(loadDriverAsset());
   }, [dispatch]);
 
-  // Update GPS position periodically when broadcasting
+  // Track GPS position locally when broadcasting (no on-chain updates)
   useEffect(() => {
     if (!broadcasting) return;
 
@@ -85,28 +81,6 @@ export default function Driver() {
 
     return () => navigator.geolocation.clearWatch(watchId);
   }, [broadcasting, dispatch]);
-
-  // Broadcast position at intervals
-  useEffect(() => {
-    if (!broadcasting || !userPosition || !vehicleId) return;
-
-    broadcastRef.current = setInterval(() => {
-      dispatch(
-        broadcastPosition({
-          vehicleId,
-          vehicleType,
-          status: driverStatus,
-          position: userPosition,
-        })
-      );
-    }, UPDATE_INTERVAL);
-
-    return () => {
-      if (broadcastRef.current) {
-        clearInterval(broadcastRef.current);
-      }
-    };
-  }, [broadcasting, userPosition, vehicleId, vehicleType, driverStatus, dispatch]);
 
   const handleCreateAsset = async () => {
     if (!vehicleId) {
@@ -143,8 +117,15 @@ export default function Driver() {
       });
       return;
     }
+    if (!driverAsset) {
+      showErrorDialog({
+        message:
+          'No taxi asset found. Please create your taxi asset first before broadcasting.',
+      });
+      return;
+    }
 
-    // Update asset to current status before broadcasting
+    // Update asset to current status and position on-chain
     try {
       await dispatch(
         updateAsset({
@@ -154,25 +135,15 @@ export default function Driver() {
           position: userPosition,
         })
       );
+      dispatch(setBroadcasting(true));
+      showSuccessDialog({
+        message: 'Broadcasting started. Your position is now visible on-chain.',
+      });
     } catch (error) {
-      // Asset might not exist yet, create it
-      try {
-        await dispatch(
-          createAsset({
-            vehicleId,
-            vehicleType,
-            position: userPosition,
-          })
-        );
-      } catch (createError) {
-        showErrorDialog({
-          message: `Failed to create/update asset: ${createError.message}`,
-        });
-        return;
-      }
+      showErrorDialog({
+        message: `Failed to update asset on-chain: ${error.message}. Broadcasting not started.`,
+      });
     }
-
-    dispatch(setBroadcasting(true));
   };
 
   const handleStopBroadcasting = async () => {
@@ -190,6 +161,26 @@ export default function Driver() {
       );
     } catch (error) {
       console.error('Failed to set offline status:', error);
+    }
+  };
+
+  // Manual location update button handler (replaces automatic interval)
+  const handleUpdateLocation = async () => {
+    if (!vehicleId || !userPosition) return;
+    try {
+      await dispatch(
+        updateAsset({
+          vehicleId,
+          vehicleType,
+          status: driverStatus,
+          position: userPosition,
+        })
+      );
+      showSuccessDialog({ message: 'Location updated on-chain.' });
+    } catch (error) {
+      showErrorDialog({
+        message: `Failed to update location: ${error.message}`,
+      });
     }
   };
 
@@ -318,7 +309,7 @@ export default function Driver() {
           {!broadcasting ? (
             <Button
               onClick={handleStartBroadcasting}
-              disabled={assetPending}
+              disabled={assetPending || !driverAsset}
               style={{ flex: 1 }}
             >
               Start Broadcasting
@@ -337,6 +328,18 @@ export default function Driver() {
           )}
         </div>
 
+        {!driverAsset && !broadcasting && (
+          <div
+            style={{
+              marginTop: 8,
+              fontSize: 12,
+              opacity: 0.6,
+            }}
+          >
+            Create your taxi asset first to enable broadcasting.
+          </div>
+        )}
+
         {broadcasting && (
           <div
             style={{
@@ -351,7 +354,18 @@ export default function Driver() {
             <div style={{ fontWeight: 600, marginBottom: 4 }}>
               Broadcasting Active
             </div>
-            <div>Position updates every 30 seconds on-chain.</div>
+            <div style={{ marginBottom: 8 }}>
+              Your taxi is visible on-chain. Use the button below to push your
+              current location to the blockchain when you are positioned and
+              ready for new passengers.
+            </div>
+            <Button
+              onClick={handleUpdateLocation}
+              disabled={assetPending || !userPosition}
+              style={{ width: '100%' }}
+            >
+              {assetPending ? 'Updating...' : 'Update Location On-Chain'}
+            </Button>
           </div>
         )}
       </FieldSet>

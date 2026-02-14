@@ -6,6 +6,11 @@ const initialState = {
   loading: false,
   error: null,
   assetOperationPending: false,
+  // Ratings
+  ratings: {},       // { [genesis]: { average, count, avoidCount } }
+  myRatings: {},     // { [genesis]: { score, avoid } }
+  ratingsLoading: false,
+  ratingPending: false,
 };
 
 export default (state = initialState, action) => {
@@ -50,6 +55,43 @@ export default (state = initialState, action) => {
         ...state,
         assetOperationPending: false,
         error: action.payload,
+      };
+    // Ratings
+    case TYPE.FETCH_RATINGS_START:
+      return {
+        ...state,
+        ratingsLoading: true,
+      };
+    case TYPE.FETCH_RATINGS_SUCCESS:
+      return {
+        ...state,
+        ratings: action.payload,
+        ratingsLoading: false,
+      };
+    case TYPE.FETCH_RATINGS_ERROR:
+      return {
+        ...state,
+        ratingsLoading: false,
+      };
+    case TYPE.SET_MY_RATINGS:
+      return {
+        ...state,
+        myRatings: action.payload,
+      };
+    case TYPE.RATING_OPERATION_START:
+      return {
+        ...state,
+        ratingPending: true,
+      };
+    case TYPE.RATING_OPERATION_SUCCESS:
+      return {
+        ...state,
+        ratingPending: false,
+      };
+    case TYPE.RATING_OPERATION_ERROR:
+      return {
+        ...state,
+        ratingPending: false,
       };
     default:
       return state;
