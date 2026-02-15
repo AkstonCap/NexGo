@@ -5,6 +5,10 @@ import {
   updateTaxiAsset,
   listMyTaxiAssets,
   getTaxiAsset,
+  createRatingAsset,
+  updateRatingAsset,
+  getMyRatingAsset,
+  fetchAllRatingsFromChain,
 } from 'api/nexusAPI';
 
 // UI actions
@@ -102,17 +106,6 @@ export const updateAsset =
     }
   };
 
-// Broadcast driver position (update asset with current location)
-export const broadcastPosition =
-  ({ vehicleId, vehicleType, status, position }) =>
-  async (dispatch) => {
-    try {
-      await updateTaxiAsset({ vehicleId, vehicleType, status, position });
-    } catch (error) {
-      console.error('Broadcast failed:', error);
-    }
-  };
-
 // Load the current driver's taxi asset if it exists
 // Uses assets/list/asset to find assets owned by the logged-in user
 export const loadDriverAsset = () => async (dispatch) => {
@@ -125,3 +118,73 @@ export const loadDriverAsset = () => async (dispatch) => {
     console.error('Error loading driver asset:', error);
   }
 };
+
+// ── Rating thunks ──
+
+// Fetch all ratings from the blockchain and aggregate per driver genesis
+export const fetchRatings = () => async (dispatch) => {
+  dispatch({ type: TYPE.FETCH_RATINGS_START });
+  try {
+    const ratings = await fetchAllRatingsFromChain();
+    dispatch({ type: TYPE.FETCH_RATINGS_SUCCESS, payload: ratings });
+  } catch (error) {
+    console.error('Error fetching ratings:', error);
+    dispatch({ type: TYPE.FETCH_RATINGS_ERROR, payload: error.message });
+  }
+};
+
+// Load the current passenger's own rating asset
+export const loadMyRatings = () => async (dispatch) => {
+  try {
+    const ratingAsset = await getMyRatingAsset();
+    if (ratingAsset && ratingAsset.ratings) {
+      dispatch({ type: TYPE.SET_MY_RATINGS, payload: ratingAsset.ratings });
+    }
+  } catch (error) {
+    console.error('Error loading my ratings:', error);
+  }
+};
+
+// Submit a rating for a driver (create or update rating asset)
+// driverGenesis: the genesis hash of the taxi owner being rated
+// score: 1-5
+// avoid: boolean
+export const submitRating =
+  ({ driverGenesis, score, avoid }) =>
+  async (dispatch, getState) => {
+    dispatch({ type: TYPE.RATING_OPERATION_START });
+    try {
+      const myRatings = getState().taxi.myRatings;
+      const updatedRatings = {
+        ...myRatings,
+        [driverGenesis]: { score, avoid },
+      };
+
+      if (Object.keys(myRatings).length === 0) {
+        // No existing rating asset — check if one exists on-chain
+        const existing = await getMyRatingAsset();
+        if (existing && existing.ratings) {
+          // Asset exists, merge and update
+          const merged = { ...existing.ratings, [driverGenesis]: { score, avoid } };
+          await updateRatingAsset(merged);
+          dispatch({ type: TYPE.SET_MY_RATINGS, payload: merged });
+        } else {
+          // No asset at all, create one
+          await createRatingAsset(updatedRatings);
+          dispatch({ type: TYPE.SET_MY_RATINGS, payload: updatedRatings });
+        }
+      } else {
+        // Rating asset already loaded, just update
+        await updateRatingAsset(updatedRatings);
+        dispatch({ type: TYPE.SET_MY_RATINGS, payload: updatedRatings });
+      }
+
+      dispatch({ type: TYPE.RATING_OPERATION_SUCCESS });
+      // Refresh global ratings
+      dispatch(fetchRatings());
+    } catch (error) {
+      console.error('Error submitting rating:', error);
+      dispatch({ type: TYPE.RATING_OPERATION_ERROR, payload: error.message });
+      throw error;
+    }
+  };

@@ -96,6 +96,10 @@ state.taxi      - Taxi data (not persisted):
   loading         - Taxi fetch loading state
   error           - Error message
   assetOperationPending - Asset create/update in progress
+  ratings         - Aggregated ratings per driver genesis { [genesis]: { average, count, avoidCount } }
+  myRatings       - Current user's own ratings { [genesis]: { score, avoid } }
+  ratingsLoading  - Ratings fetch loading state
+  ratingPending   - Rating submit in progress
 ```
 
 ### On-Chain Asset Format (Distordia Standard)
@@ -115,16 +119,92 @@ Taxi assets follow the Distordia `nexgo-taxi` standard. Assets are created with 
 
 Asset naming convention: `nexgo-taxi-{vehicleId}`
 
+### On-Chain Rating Format (Distordia Standard)
+
+Passenger ratings follow the Distordia `nexgo-rating` standard. Assets are created in **raw format** (state register), one per passenger, max 1KB:
+
+```json
+{
+  "distordia-type": "nexgo-rating",
+  "ratings": {
+    "<driver-genesis-hash>": { "score": 4, "avoid": false },
+    "<driver-genesis-hash>": { "score": 1, "avoid": true }
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `distordia-type` | string | Always `nexgo-rating` |
+| `ratings` | object | Map of driver genesis hash to rating entry |
+| `ratings[genesis].score` | number | Rating 1 (worst) to 5 (best) |
+| `ratings[genesis].avoid` | boolean | If true, driver is flagged as "to be avoided" |
+
+- Asset naming convention: `nexgo-ratings` (local to each passenger's sig chain)
+- Format: raw (updatable state register, NOT JSON object register)
+- Cost: 1 NXS (create) + 1 NXS (name). Updates cost only the tx fee.
+- The app queries all raw assets via `register/list/assets:raw`, parses each one, and aggregates ratings per driver genesis to compute averages.
+
+### Contractual Ride Flow (Design - Using Nexus Invoices API)
+
+The full decentralized ride flow uses Assets for state and Invoices for payment:
+
+1. **Passenger creates ride request asset** (`nexgo-ride` standard, raw format):
+   ```json
+   {
+     "distordia-type": "nexgo-ride",
+     "pickup-lat": "40.7128", "pickup-lng": "-74.0060",
+     "dest-lat": "40.7589", "dest-lng": "-73.9851",
+     "passengers": 2,
+     "status": "requesting",
+     "driver-genesis": ""
+   }
+   ```
+   Asset name: `nexgo-ride-{timestamp}` (local to passenger's sig chain).
+
+2. **Driver accepts ride**: Driver updates their taxi asset status to `occupied` and the passenger updates the ride asset with the driver's genesis and status `accepted`.
+
+3. **Driver creates invoice** via `invoices/create/invoice`:
+   - `recipient`: passenger's genesis/username
+   - `account`: driver's NXS payment account
+   - `items`: `[{ description: "Ride from X to Y", unit_amount: price, units: 1 }]`
+   - The invoice is automatically transferred to the passenger with a conditional contract that requires payment to claim.
+
+4. **Passenger pays invoice** via `invoices/pay/invoice`:
+   - `from`: passenger's NXS account
+   - Payment is atomic: DEBIT (payment) + CLAIM (invoice ownership transfer) happen in one transaction.
+   - On success, ride asset status becomes `paid`.
+
+5. **Ride completion**: Driver updates taxi asset back to `available`. Passenger can rate the driver via the rating system.
+
+6. **Cancellation**: If unpaid, the driver can cancel via `invoices/cancel/invoice`. The ride asset can be updated to `cancelled`.
+
+Key Nexus API endpoints for the contractual flow:
+- `invoices/create/invoice` - Driver creates invoice for the ride (requires PIN)
+- `invoices/pay/invoice` - Passenger pays the ride invoice (requires PIN)
+- `invoices/cancel/invoice` - Driver cancels unpaid invoice
+- `invoices/get/invoice` - Get invoice details (status, amount, items)
+- `invoices/list/outstanding` - List unpaid invoices for current user
+- `assets/create/asset` (raw) - Passenger creates ride request
+- `assets/update/asset` (raw) - Update ride request status
+
+All operations are on-chain and decentralized. The Invoice API handles conditional contracts internally - the payment is guaranteed by the blockchain (no escrow needed). Invoices support expiration via the `expires` parameter, and can be voided by the sender if expired.
+
 ### Nexus API Endpoints Used
 
 | Endpoint | Purpose | Auth Required |
 |----------|---------|---------------|
-| `assets/create/asset` | Create new taxi asset (JSON format) | Yes |
-| `assets/update/asset` | Update taxi position/status | Yes |
-| `assets/get/asset` | Get specific taxi asset by name | No |
+| `assets/create/asset` | Create new taxi asset (JSON) or rating asset (raw) | Yes (PIN) |
+| `assets/update/asset` | Update taxi position/status or rating data | Yes (PIN) |
+| `assets/get/asset` | Get specific taxi or rating asset by name | No |
 | `assets/list/asset` | List user's own taxi assets | Yes |
 | `register/list/assets:asset` | List all taxi assets globally | No |
+| `register/list/assets:raw` | List all raw assets globally (for ratings) | No |
 | `profiles/status/master` | Check if user is logged in | Yes |
+| `invoices/create/invoice` | Create ride invoice (future) | Yes (PIN) |
+| `invoices/pay/invoice` | Pay ride invoice (future) | Yes (PIN) |
+| `invoices/cancel/invoice` | Cancel unpaid invoice (future) | Yes (PIN) |
+| `invoices/get/invoice` | Get invoice details (future) | No |
 
 ### Persistence
 
@@ -185,7 +265,9 @@ import { createTaxiAsset } from 'api/nexusAPI';
 - No linter configured (no ESLint)
 - No CI/CD pipeline
 - No user authentication beyond wallet connection
-- Ride request/payment flow not yet implemented (viewing and broadcasting only)
+- Ride request/payment/invoice flow designed but not yet implemented (see Contractual Ride Flow section)
+- Rating asset query fetches all raw assets on chain (could be slow with many raw assets; filtering by data content may improve this in future)
+- Driver location updates are manual (secureApiCall requires PIN input per update)
 
 ## Working with This Codebase
 

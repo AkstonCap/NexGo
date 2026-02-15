@@ -123,6 +123,7 @@ export async function fetchTaxisFromChain() {
   if (Array.isArray(result)) {
     return result.map((asset) => ({
       id: asset.address,
+      owner: asset.owner || '',
       vehicleId: asset['vehicle-id'] || 'Unknown',
       type: asset['vehicle-type'] || 'sedan',
       status: asset.status || 'available',
@@ -163,6 +164,139 @@ export async function listMyTaxiAssets() {
 // Endpoint: profiles/status/master
 export async function getProfileStatus() {
   return await apiCall('profiles/status/master', {});
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Rating System - Distordia Standard: nexgo-rating
+// ──────────────────────────────────────────────────────────────────────────────
+//
+// On-chain rating asset standard (raw format):
+//
+// Format: raw (state register, updatable)
+// Name: nexgo-ratings (local to each passenger's sig chain)
+// Cost: 1 NXS (create) + 1 NXS (name)
+//
+// Data format (JSON string, max 1KB):
+// {
+//   "distordia-type": "nexgo-rating",
+//   "ratings": {
+//     "<driver-genesis-hash>": { "score": 1-5, "avoid": true|false },
+//     ...
+//   }
+// }
+//
+// Fields:
+//   distordia-type  string  Always "nexgo-rating" - identifies this standard
+//   ratings         object  Map of driver genesis hash to rating entry
+//     score         number  Rating score from 1 (worst) to 5 (best)
+//     avoid         boolean If true, marks this driver as "to be avoided"
+//
+// Querying: register/list/assets:raw fetches all raw assets globally.
+// The app parses each asset's data field and filters for
+// distordia-type === "nexgo-rating" to aggregate ratings per driver.
+// ──────────────────────────────────────────────────────────────────────────────
+
+// Create passenger's rating asset (raw format, one per user)
+// Endpoint: assets/create/raw
+export async function createRatingAsset(initialRatings) {
+  const data = JSON.stringify({
+    'distordia-type': 'nexgo-rating',
+    ratings: initialRatings || {},
+  });
+
+  return await secureApiCall('assets/create/asset', {
+    name: 'nexgo-ratings',
+    format: 'raw',
+    data,
+  });
+}
+
+// Update passenger's rating asset with new ratings data
+// Endpoint: assets/update/raw
+export async function updateRatingAsset(ratingsData) {
+  const data = JSON.stringify({
+    'distordia-type': 'nexgo-rating',
+    ratings: ratingsData,
+  });
+
+  return await secureApiCall('assets/update/asset', {
+    name: 'nexgo-ratings',
+    format: 'raw',
+    data,
+  });
+}
+
+// Get current user's own rating asset
+// Endpoint: assets/get/raw
+export async function getMyRatingAsset() {
+  try {
+    const result = await apiCall('assets/get/asset', {
+      name: 'nexgo-ratings',
+    });
+    if (result && result.data) {
+      const parsed = JSON.parse(result.data);
+      return { address: result.address, ...parsed };
+    }
+    return null;
+  } catch (error) {
+    return null;
+  }
+}
+
+// Fetch all rating assets from chain to compute average ratings
+// Endpoint: register/list/assets:raw
+// Parses each raw asset's data and filters for nexgo-rating standard
+export async function fetchAllRatingsFromChain() {
+  try {
+    const result = await apiCall('register/list/assets:raw', {
+      limit: 500,
+    });
+
+    if (!Array.isArray(result)) return {};
+
+    // Aggregate: { genesis: { totalScore, count, avoidCount } }
+    const aggregated = {};
+
+    for (const asset of result) {
+      try {
+        if (!asset.data) continue;
+        const parsed = JSON.parse(asset.data);
+        if (parsed['distordia-type'] !== 'nexgo-rating') continue;
+        if (!parsed.ratings) continue;
+
+        for (const [genesis, entry] of Object.entries(parsed.ratings)) {
+          if (!aggregated[genesis]) {
+            aggregated[genesis] = { totalScore: 0, count: 0, avoidCount: 0 };
+          }
+          if (typeof entry.score === 'number' && entry.score >= 1 && entry.score <= 5) {
+            aggregated[genesis].totalScore += entry.score;
+            aggregated[genesis].count += 1;
+          }
+          if (entry.avoid) {
+            aggregated[genesis].avoidCount += 1;
+          }
+        }
+      } catch (parseErr) {
+        // Skip non-JSON or malformed raw assets
+        continue;
+      }
+    }
+
+    // Compute averages
+    const ratings = {};
+    for (const [genesis, data] of Object.entries(aggregated)) {
+      ratings[genesis] = {
+        average: data.count > 0 ? data.totalScore / data.count : 0,
+        count: data.count,
+        avoidCount: data.avoidCount,
+      };
+    }
+
+    return ratings;
+  } catch (error) {
+    console.error('Error fetching ratings:', error);
+    return {};
+  }
 }
 
 // Haversine distance calculation (km) - matches web version
