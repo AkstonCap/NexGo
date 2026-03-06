@@ -9,14 +9,16 @@ State machine diagrams for every major flow in the NexGo app.
 ```mermaid
 stateDiagram-v2
     [*] --> CreatingStore : App mounts
-    CreatingStore --> ListeningToWallet : configureStore()
-    ListeningToWallet --> RequestingGeolocation : listenToWalletData(store)
+    CreatingStore --> HydratingState : configureStore()
+    HydratingState --> RequestingGeolocation : Main useEffect()
+    RequestingGeolocation --> GPSAcquired : navigator.geolocation\nsuccess
+    RequestingGeolocation --> FallingBackToIP : navigator.geolocation\nerror / denied / timeout
+    FallingBackToIP --> IPAcquired : ipapi.co success
+    FallingBackToIP --> NoLocation : IP lookup failed
 
-    RequestingGeolocation --> GeolocationAcquired : navigator.geolocation\nsuccess
-    RequestingGeolocation --> GeolocationDenied : navigator.geolocation\nerror / denied
-
-    GeolocationAcquired --> Ready : setUserPosition() +\nfetchTaxis()
-    GeolocationDenied --> Ready : fetchTaxis()\n(no position)
+    GPSAcquired --> Ready : setUserPosition() +\nfetchTaxis()
+    IPAcquired --> Ready : setUserPosition() +\nfetchTaxis()
+    NoLocation --> Ready : fetchTaxis()\n(no position)
 
     Ready --> [*]
 
@@ -24,6 +26,11 @@ stateDiagram-v2
         Redux store with thunk,
         storageMiddleware (disk),
         stateMiddleware (session)
+    end note
+
+    note right of HydratingState
+        INITIALIZE merges saved
+        state.settings and state.ui
     end note
 
     note right of Ready
@@ -64,7 +71,7 @@ stateDiagram-v2
 
 ## 3. Taxi Fetching
 
-Shared sub-flow used by the Passenger tab (auto-refresh every 10s, manual refresh, and initial mount).
+Shared sub-flow used by the Passenger tab (initial mount, auto-refresh every 10s, and manual refresh).
 
 ```mermaid
 stateDiagram-v2
@@ -87,6 +94,7 @@ stateDiagram-v2
     note right of Loaded
         state.taxi.taxis = [{
           id, vehicleId, type,
+          serviceType,
           status, lat, lng,
           driver, lastUpdate
         }, ...]
@@ -99,13 +107,17 @@ stateDiagram-v2
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Idle : Tab active
+    [*] --> LoadingPassengerData : Tab active
+    LoadingPassengerData : fetchRatings()
+    LoadingPassengerData : loadMyRatings()
+    LoadingPassengerData --> Idle
 
     state Idle {
         [*] --> ViewingTaxiList
         ViewingTaxiList : Taxi list sorted by distance
         ViewingTaxiList : Map shows taxi markers
         ViewingTaxiList : Auto-refresh every 10s
+        ViewingTaxiList : Ratings shown per taxi owner
     }
 
     Idle --> SearchingDestination : User types in\naddress field
@@ -127,6 +139,18 @@ stateDiagram-v2
         ViewingRoute : Taxi list still visible
     }
 
+    DestinationSelected --> CreatingRideRequest : Click Hire / Hire Auto\n[pickup + destination + taxi available]
+
+    state CreatingRideRequest {
+        [*] --> SubmittingRide
+        SubmittingRide : API: assets/create/asset\nformat=raw
+        SubmittingRide : name = nexgo-ride-{timestamp}
+        SubmittingRide : data.distordia-type = nexgo-ride
+    }
+
+    CreatingRideRequest --> DestinationSelected : Success\nshowSuccessDialog()
+    CreatingRideRequest --> DestinationSelected : Error\nshowErrorDialog()
+
     DestinationSelected --> SearchingDestination : User changes\ndestination
     DestinationSelected --> Idle : User clears\ndestination
 ```
@@ -134,6 +158,8 @@ stateDiagram-v2
 ---
 
 ## 5. Driver Asset Management
+
+This flow is for human-operated taxis created inside the module. Autonomous taxis can skip the UI and create/update the same `nexgo-taxi` asset standard directly via the Nexus API.
 
 ```mermaid
 stateDiagram-v2
@@ -147,6 +173,7 @@ stateDiagram-v2
         EditingForm : Enter Vehicle ID
         EditingForm : Select Vehicle Type
         EditingForm : Select Status (available/occupied)
+        EditingForm : service-type = human
     }
 
     NoAsset --> CreatingAsset : Click "Create Taxi Asset"\n[vehicleId not empty]
@@ -155,6 +182,8 @@ stateDiagram-v2
         [*] --> Pending
         Pending : ASSET_OPERATION_START
         Pending : API: assets/create/asset
+        Pending : format=JSON
+        Pending : fields include\nservice-type, driver, timestamp
         Pending --> Verifying : Asset created
         Verifying : API: assets/get/asset
         Verifying : Fetch back the new asset
@@ -200,31 +229,33 @@ stateDiagram-v2
     Idle --> StartingBroadcast : Click "Start Broadcasting"\n[vehicleId not empty, GPS available]
 
     state StartingBroadcast {
-        [*] --> EnsureAsset
-        EnsureAsset --> CreatingAsset : No asset exists
-        EnsureAsset --> ActivateBroadcast : Asset exists
-        CreatingAsset --> ActivateBroadcast : Asset created
+        [*] --> ValidateState
+        ValidateState --> Blocked : No vehicleId / no position / no asset
+        ValidateState --> PushInitialUpdate : Ready to publish
+        PushInitialUpdate : API: assets/update/asset\n(status, lat, lng, timestamp)
+        PushInitialUpdate --> ActivateBroadcast : Update succeeded
         ActivateBroadcast : setBroadcasting(true)
     }
 
+    StartingBroadcast --> Idle : Error\nshowErrorDialog()
     StartingBroadcast --> Broadcasting : Broadcasting activated
 
     state Broadcasting {
         [*] --> Active
         Active : GPS watchPosition() running\n(high accuracy)
-        Active : 30s interval sending position
+        Active : Redux userPosition updated locally
         Active : Form fields disabled
 
         state Active {
-            [*] --> WaitingInterval
-            WaitingInterval --> SendingUpdate : 30s elapsed
-            SendingUpdate : API: assets/update/asset\n(lat, lng, status, vehicle-type)
-            SendingUpdate --> WaitingInterval : Update complete\n(silent error handling)
+            [*] --> WaitingForManualPush
+            WaitingForManualPush --> SendingUpdate : Click "Update Location On-Chain"
+            SendingUpdate : API: assets/update/asset\n(lat, lng, status, vehicle-type, timestamp)
+            SendingUpdate --> WaitingForManualPush : Success / Error dialog
         }
     }
 
     Broadcasting --> StatusChange : Toggle Available / Occupied
-    StatusChange --> Broadcasting : setDriverStatus()\n(next broadcast uses new status)
+    StatusChange --> Broadcasting : setDriverStatus()\n(next on-chain push uses new status)
 
     Broadcasting --> StoppingBroadcast : Click "Stop Broadcasting"
 
@@ -232,17 +263,51 @@ stateDiagram-v2
         [*] --> Deactivating
         Deactivating : setBroadcasting(false)
         Deactivating : Clear GPS watch
-        Deactivating : Clear 30s interval
         Deactivating --> SettingOffline : Update asset\nstatus = 'offline'
         SettingOffline : API: assets/update/asset
     }
 
     StoppingBroadcast --> Idle : Done\n(silent error handling)
+
+    state Blocked {
+        [*] --> WaitingForInput
+    }
 ```
 
 ---
 
-## 7. Full System Overview
+## 7. Decentralized Hire + Settlement Flow
+
+This is the intended end-to-end decentralized service flow aligned with the Nexus Assets and Invoices APIs. The current code implements discovery, rating, and passenger ride-request creation. Acceptance, invoicing, and settlement remain the next integration step.
+
+```mermaid
+stateDiagram-v2
+    [*] --> TaxiPublished
+
+    TaxiPublished --> RideRequested : Passenger creates\nnexgo-ride raw asset
+    RideRequested --> AcceptedByHuman : Driver agent watches requests\nand accepts off-chain or via API
+    RideRequested --> AcceptedByAutonomous : Autonomous fleet agent\nwatches requests via API
+
+    AcceptedByHuman --> InvoiceCreated
+    AcceptedByAutonomous --> InvoiceCreated
+
+    state InvoiceCreated {
+        [*] --> Outstanding
+        Outstanding : API: invoices/create/invoice
+        Outstanding : recipient = passenger genesis
+        Outstanding : account = provider payment account
+    }
+
+    InvoiceCreated --> Paid : Passenger pays\ninvoices/pay/invoice
+    InvoiceCreated --> Cancelled : Provider cancels\ninvoices/cancel/invoice
+    Paid --> Completed : Taxi status returns to available\nPassenger can rate provider
+    Cancelled --> [*]
+    Completed --> [*]
+```
+
+---
+
+## 8. Full System Overview
 
 ```mermaid
 stateDiagram-v2
@@ -265,6 +330,8 @@ stateDiagram-v2
                 MapView
                 DestinationSearch
                 RouteDisplay
+                Ratings
+                RideRequestCreation
             }
         }
 
@@ -292,6 +359,9 @@ stateDiagram-v2
         AssetsUpdate : Update position/status (auth)
         AssetsGet : Verify asset (public)
         AssetsList : List own assets (auth)
+        AssetsCreateRaw : Create ride request (auth)
+        InvoicesCreate : Create settlement invoice (planned)
+        InvoicesPay : Pay settlement invoice (planned)
     }
 
     state ExternalAPIs {

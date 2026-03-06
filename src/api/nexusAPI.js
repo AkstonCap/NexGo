@@ -11,6 +11,13 @@ export const TAXI_ASSET_SCHEMA = [
     maxlength: 64,
   },
   {
+    name: 'service-type',
+    type: 'string',
+    value: 'human',
+    mutable: false,
+    maxlength: 64,
+  },
+  {
     name: 'vehicle-id',
     type: 'string',
     value: '',
@@ -59,14 +66,42 @@ export const TAXI_ASSET_SCHEMA = [
     mutable: true,
     maxlength: 128,
   },
+  {
+    name: 'timestamp',
+    type: 'string',
+    value: '',
+    mutable: true,
+    maxlength: 64,
+  },
 ];
+
+async function resolveProfileGenesis() {
+  try {
+    const profile = await getProfileStatus();
+    return profile?.genesis || '';
+  } catch (error) {
+    return '';
+  }
+}
 
 // Create a new taxi asset on-chain using Nexus Assets API (JSON format)
 // Endpoint: assets/create/asset
 // Requires authenticated session (user must be logged in to wallet)
-export async function createTaxiAsset({ vehicleId, vehicleType, position, pricePerKm }) {
+export async function createTaxiAsset({
+  vehicleId,
+  vehicleType,
+  position,
+  pricePerKm,
+  serviceType = 'human',
+  driver,
+}) {
+  const driverIdentity = driver || (await resolveProfileGenesis());
+  const timestamp = new Date().toISOString();
+
   const json = TAXI_ASSET_SCHEMA.map((field) => {
     switch (field.name) {
+      case 'service-type':
+        return { ...field, value: serviceType };
       case 'vehicle-id':
         return { ...field, value: vehicleId };
       case 'vehicle-type':
@@ -79,6 +114,10 @@ export async function createTaxiAsset({ vehicleId, vehicleType, position, priceP
         return { ...field, value: position ? position.lng.toString() : '0' };
       case 'status':
         return { ...field, value: 'available' };
+      case 'driver':
+        return { ...field, value: driverIdentity };
+      case 'timestamp':
+        return { ...field, value: timestamp };
       default:
         return field;
     }
@@ -94,14 +133,24 @@ export async function createTaxiAsset({ vehicleId, vehicleType, position, priceP
 // Update an existing taxi asset on-chain
 // Endpoint: assets/update/asset
 // Only mutable fields can be updated
-export async function updateTaxiAsset({ vehicleId, vehicleType, status, position, pricePerKm }) {
+export async function updateTaxiAsset({
+  vehicleId,
+  vehicleType,
+  status,
+  position,
+  pricePerKm,
+  driver,
+}) {
+  const driverIdentity = driver || (await resolveProfileGenesis());
   const params = {
     name: `nexgo-taxi-${vehicleId}`,
     format: 'basic',
+    timestamp: new Date().toISOString(),
   };
 
   if (vehicleType) params['vehicle-type'] = vehicleType;
   if (status) params.status = status;
+  if (driverIdentity) params.driver = driverIdentity;
   if (pricePerKm != null) params['price-per-km'] = pricePerKm.toString();
   if (position) {
     params.latitude = position.lat.toString();
@@ -126,12 +175,13 @@ export async function fetchTaxisFromChain() {
       owner: asset.owner || '',
       vehicleId: asset['vehicle-id'] || 'Unknown',
       type: asset['vehicle-type'] || 'sedan',
+      serviceType: asset['service-type'] || 'human',
       status: asset.status || 'available',
       lat: parseFloat(asset.latitude) || 0,
       lng: parseFloat(asset.longitude) || 0,
       pricePerKm: parseFloat(asset['price-per-km']) || 0,
       driver: asset.driver || 'Unknown Driver',
-      lastUpdate: asset.modified,
+      lastUpdate: asset.timestamp || asset.modified,
       name: asset.name,
     }));
   }
@@ -297,6 +347,62 @@ export async function fetchAllRatingsFromChain() {
     console.error('Error fetching ratings:', error);
     return {};
   }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Ride Requests - Distordia Standard: nexgo-ride
+// ──────────────────────────────────────────────────────────────────────────────
+//
+// A passenger creates a raw asset that any driver or autonomous taxi agent can
+// observe through the Nexus API and act on without centralized infrastructure.
+//
+// Data format (JSON string):
+// {
+//   "distordia-type": "nexgo-ride",
+//   "version": 1,
+//   "status": "requesting",
+//   "taxi-owner": "<provider genesis>",
+//   "taxi-name": "nexgo-taxi-...",
+//   "vehicle-id": "ABC-123",
+//   "service-type": "human|autonomous",
+//   "pickup-lat": "...",
+//   "pickup-lng": "...",
+//   "dest-lat": "...",
+//   "dest-lng": "...",
+//   "created-at": "2026-03-06T12:00:00.000Z"
+// }
+// ──────────────────────────────────────────────────────────────────────────────
+
+export async function createRideRequestAsset({ taxi, pickup, destination }) {
+  if (!taxi?.owner) {
+    throw new Error('Taxi owner is required for a ride request.');
+  }
+
+  if (!pickup || !destination) {
+    throw new Error('Pickup and destination are required for a ride request.');
+  }
+
+  const createdAt = new Date().toISOString();
+  const data = JSON.stringify({
+    'distordia-type': 'nexgo-ride',
+    version: 1,
+    status: 'requesting',
+    'taxi-owner': taxi.owner,
+    'taxi-name': taxi.name || '',
+    'vehicle-id': taxi.vehicleId || '',
+    'service-type': taxi.serviceType || 'human',
+    'pickup-lat': pickup.lat.toString(),
+    'pickup-lng': pickup.lng.toString(),
+    'dest-lat': destination.lat.toString(),
+    'dest-lng': destination.lng.toString(),
+    'created-at': createdAt,
+  });
+
+  return await secureApiCall('assets/create/asset', {
+    name: `nexgo-ride-${Date.now()}`,
+    format: 'raw',
+    data,
+  });
 }
 
 // Haversine distance calculation (km) - matches web version

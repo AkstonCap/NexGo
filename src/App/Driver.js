@@ -18,7 +18,6 @@ import {
   createAsset,
   updateAsset,
   loadDriverAsset,
-  fetchTaxis,
 } from 'actions/actionCreators';
 
 const loadLocationOptions = (inputValue, callback) => {
@@ -52,7 +51,6 @@ export default function Driver() {
   const assetPending = useSelector(
     (state) => state.taxi.assetOperationPending
   );
-  const userStatus = useSelector((state) => state.nexus.userStatus);
   const dispatch = useDispatch();
 
   // Load driver's existing asset on mount
@@ -221,7 +219,9 @@ export default function Driver() {
       <div style={{ marginBottom: 16 }}>
         <p>
           Register your vehicle and broadcast your position on-chain. Passengers
-          will see you on the map and can request rides.
+          will see you on the map and can hire you with an on-chain ride
+          request. Autonomous fleets can also register compatible taxi assets
+          directly through the Nexus API.
         </p>
       </div>
 
@@ -355,9 +355,8 @@ export default function Driver() {
               Broadcasting Active
             </div>
             <div style={{ marginBottom: 8 }}>
-              Your taxi is visible on-chain. Use the button below to push your
-              current location to the blockchain when you are positioned and
-              ready for new passengers.
+              Your taxi is visible on-chain. Location tracking stays local until
+              you manually push the current coordinates to the blockchain.
             </div>
             <Button
               onClick={handleUpdateLocation}

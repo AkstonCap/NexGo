@@ -15,7 +15,7 @@ import {
   loadMyRatings,
   submitRating,
 } from 'actions/actionCreators';
-import { calculateDistance } from 'api/nexusAPI';
+import { calculateDistance, createRideRequestAsset } from 'api/nexusAPI';
 
 const REFRESH_INTERVAL = 10000; // 10 seconds, matching web version
 
@@ -93,6 +93,7 @@ export default function Passenger() {
   const [ratingTaxi, setRatingTaxi] = useState(null); // taxi being rated
   const [ratingScore, setRatingScore] = useState(3);
   const [ratingAvoid, setRatingAvoid] = useState(false);
+  const [hirePendingTaxiId, setHirePendingTaxiId] = useState(null);
   const taxis = useSelector((state) => state.taxi.taxis);
   const loading = useSelector((state) => state.taxi.loading);
   const ratings = useSelector((state) => state.taxi.ratings);
@@ -125,6 +126,47 @@ export default function Passenger() {
     setRatingTaxi(taxi);
     setRatingScore(existing ? existing.score : 3);
     setRatingAvoid(existing ? existing.avoid : false);
+  };
+
+  const handleHireTaxi = async (taxi) => {
+    if (!userPosition) {
+      showErrorDialog({
+        message: 'Set your pickup position before creating a ride request.',
+      });
+      return;
+    }
+
+    if (!destination?.value) {
+      showErrorDialog({
+        message: 'Choose a destination before hiring a taxi.',
+      });
+      return;
+    }
+
+    setHirePendingTaxiId(taxi.id);
+    try {
+      await createRideRequestAsset({
+        taxi,
+        pickup: userPosition,
+        destination: {
+          lat: destination.value.lat,
+          lng: destination.value.lon,
+        },
+      });
+
+      showSuccessDialog({
+        message:
+          taxi.serviceType === 'autonomous'
+            ? 'Autonomous taxi hire request created on-chain.'
+            : 'Ride request created on-chain for the selected taxi.',
+      });
+    } catch (error) {
+      showErrorDialog({
+        message: `Failed to create ride request: ${error.message}`,
+      });
+    } finally {
+      setHirePendingTaxiId(null);
+    }
   };
 
   const handleSubmitRating = async () => {
@@ -165,7 +207,9 @@ export default function Passenger() {
       <div style={{ marginBottom: 16 }}>
         <p>
           Find nearby available taxis in real-time. Drivers post their position
-          and status on-chain for transparent, trustless ride matching.
+          and status on-chain for transparent, trustless ride matching. Human
+          drivers and autonomous taxis can both be hired through on-chain ride
+          requests.
         </p>
       </div>
 
@@ -247,6 +291,11 @@ export default function Passenger() {
                       <div style={{ fontSize: 12, opacity: 0.7 }}>
                         {taxi.type.charAt(0).toUpperCase() + taxi.type.slice(1)}
                       </div>
+                      <div style={{ fontSize: 11, opacity: 0.55, marginTop: 1 }}>
+                        {taxi.serviceType === 'autonomous'
+                          ? 'Autonomous service'
+                          : 'Human-operated service'}
+                      </div>
                       {driverRating && driverRating.count > 0 && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
                           <StarRating score={driverRating.average} size={12} />
@@ -317,6 +366,20 @@ export default function Passenger() {
                           Rate
                         </span>
                       )}
+                      <Button
+                        onClick={() => handleHireTaxi(taxi)}
+                        disabled={
+                          taxi.status !== 'available' ||
+                          hirePendingTaxiId === taxi.id
+                        }
+                        style={{ fontSize: 11, padding: '3px 10px' }}
+                      >
+                        {hirePendingTaxiId === taxi.id
+                          ? 'Hiring...'
+                          : taxi.serviceType === 'autonomous'
+                            ? 'Hire Auto'
+                            : 'Hire'}
+                      </Button>
                     </div>
                   </div>
 

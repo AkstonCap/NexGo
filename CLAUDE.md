@@ -109,12 +109,13 @@ Taxi assets follow the Distordia `nexgo-taxi` standard. Assets are created with 
 | Field | Type | Mutable | Description |
 |-------|------|---------|-------------|
 | `distordia-type` | string | no | Always `nexgo-taxi` |
+| `service-type` | string | no | `human` or `autonomous` |
 | `vehicle-id` | string | yes | License plate / vehicle identifier |
 | `vehicle-type` | string | yes | sedan, suv, van, luxury |
 | `status` | string | yes | available, occupied, offline |
 | `latitude` | string | yes | GPS latitude as string |
 | `longitude` | string | yes | GPS longitude as string |
-| `driver` | string | yes | Driver wallet address |
+| `driver` | string | yes | Provider / operator genesis |
 | `timestamp` | string | yes | ISO 8601 last update time |
 
 Asset naming convention: `nexgo-taxi-{vehicleId}`
@@ -145,9 +146,9 @@ Passenger ratings follow the Distordia `nexgo-rating` standard. Assets are creat
 - Cost: 1 NXS (create) + 1 NXS (name). Updates cost only the tx fee.
 - The app queries all raw assets via `register/list/assets:raw`, parses each one, and aggregates ratings per driver genesis to compute averages.
 
-### Contractual Ride Flow (Design - Using Nexus Invoices API)
+### Contractual Ride Flow (Partially Implemented - Using Nexus Invoices API)
 
-The full decentralized ride flow uses Assets for state and Invoices for payment:
+The decentralized ride flow uses Assets for state and Invoices for payment. The current code already creates passenger ride-request assets; acceptance and settlement remain the next integration step.
 
 1. **Passenger creates ride request asset** (`nexgo-ride` standard, raw format):
    ```json
@@ -199,7 +200,7 @@ All operations are on-chain and decentralized. The Invoice API handles condition
 | `assets/get/asset` | Get specific taxi or rating asset by name | No |
 | `assets/list/asset` | List user's own taxi assets | Yes |
 | `register/list/assets:asset` | List all taxi assets globally | No |
-| `register/list/assets:raw` | List all raw assets globally (for ratings) | No |
+| `register/list/assets:raw` | List all raw assets globally (for ratings and rides) | No |
 | `profiles/status/master` | Check if user is logged in | Yes |
 | `invoices/create/invoice` | Create ride invoice (future) | Yes (PIN) |
 | `invoices/pay/invoice` | Pay ride invoice (future) | Yes (PIN) |
@@ -265,7 +266,7 @@ import { createTaxiAsset } from 'api/nexusAPI';
 - No linter configured (no ESLint)
 - No CI/CD pipeline
 - No user authentication beyond wallet connection
-- Ride request/payment/invoice flow designed but not yet implemented (see Contractual Ride Flow section)
+- Passenger ride requests are implemented, but driver / autonomous acceptance and invoice settlement are not yet wired into the UI
 - Rating asset query fetches all raw assets on chain (could be slow with many raw assets; filtering by data content may improve this in future)
 - Driver location updates are manual (secureApiCall requires PIN input per update)
 
