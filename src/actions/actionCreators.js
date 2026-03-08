@@ -48,6 +48,16 @@ export const setVehicleType = (vehicleType) => ({
   payload: vehicleType,
 });
 
+export const setDriverPaymentAccount = (account) => ({
+  type: TYPE.SET_DRIVER_PAYMENT_ACCOUNT,
+  payload: account,
+});
+
+export const setPassengerPaymentAccount = (account) => ({
+  type: TYPE.SET_PASSENGER_PAYMENT_ACCOUNT,
+  payload: account,
+});
+
 export const showConnections = () => ({
   type: TYPE.SHOW_CONNECTIONS,
 });

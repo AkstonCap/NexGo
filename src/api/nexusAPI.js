@@ -216,6 +216,76 @@ export async function getProfileStatus() {
   return await apiCall('profiles/status/master', {});
 }
 
+function safeParseRawData(data) {
+  try {
+    return JSON.parse(data);
+  } catch (error) {
+    return null;
+  }
+}
+
+function normalizeRideAsset(asset) {
+  const parsed = safeParseRawData(asset?.data);
+
+  if (!parsed || parsed['distordia-type'] !== 'nexgo-ride') {
+    return null;
+  }
+
+  return {
+    address: asset.address,
+    name: asset.name,
+    owner: asset.owner || parsed['passenger-genesis'] || '',
+    status: parsed.status || 'requesting',
+    taxiOwner: parsed['taxi-owner'] || '',
+    taxiName: parsed['taxi-name'] || '',
+    vehicleId: parsed['vehicle-id'] || '',
+    serviceType: parsed['service-type'] || 'human',
+    pickupLat: parseFloat(parsed['pickup-lat']) || 0,
+    pickupLng: parseFloat(parsed['pickup-lng']) || 0,
+    pickupLabel: parsed['pickup-label'] || '',
+    destinationLat: parseFloat(parsed['dest-lat']) || 0,
+    destinationLng: parseFloat(parsed['dest-lng']) || 0,
+    destinationLabel: parsed['dest-label'] || '',
+    invoiceAddress: parsed['invoice-address'] || '',
+    invoiceStatus: parsed['invoice-status'] || '',
+    createdAt: parsed['created-at'] || '',
+    acceptedAt: parsed['accepted-at'] || '',
+    paidAt: parsed['paid-at'] || '',
+    cancelledAt: parsed['cancelled-at'] || '',
+    raw: parsed,
+  };
+}
+
+function normalizeInvoice(invoice) {
+  if (!invoice) return null;
+
+  return {
+    address: invoice.address,
+    owner: invoice.owner || '',
+    recipient: invoice.recipient || '',
+    account: invoice.account || '',
+    amount: typeof invoice.amount === 'number' ? invoice.amount : parseFloat(invoice.amount) || 0,
+    status: invoice.status || 'OUTSTANDING',
+    items: Array.isArray(invoice.items) ? invoice.items : [],
+    created: invoice.created,
+    modified: invoice.modified,
+    name: invoice.name || '',
+  };
+}
+
+export function extractRideAddressFromInvoice(invoice) {
+  const descriptions = (invoice?.items || [])
+    .map((item) => item?.description || '')
+    .filter(Boolean);
+
+  for (const description of descriptions) {
+    const match = description.match(/ride=([A-Za-z0-9]+)/i);
+    if (match) return match[1];
+  }
+
+  return '';
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Rating System - Distordia Standard: nexgo-rating
 // ──────────────────────────────────────────────────────────────────────────────
@@ -383,18 +453,22 @@ export async function createRideRequestAsset({ taxi, pickup, destination }) {
   }
 
   const createdAt = new Date().toISOString();
+  const profile = await getProfileStatus();
   const data = JSON.stringify({
     'distordia-type': 'nexgo-ride',
     version: 1,
     status: 'requesting',
+    'passenger-genesis': profile?.genesis || '',
     'taxi-owner': taxi.owner,
     'taxi-name': taxi.name || '',
     'vehicle-id': taxi.vehicleId || '',
     'service-type': taxi.serviceType || 'human',
     'pickup-lat': pickup.lat.toString(),
     'pickup-lng': pickup.lng.toString(),
+    'pickup-label': pickup.label || '',
     'dest-lat': destination.lat.toString(),
     'dest-lng': destination.lng.toString(),
+    'dest-label': destination.label || '',
     'created-at': createdAt,
   });
 
@@ -402,6 +476,107 @@ export async function createRideRequestAsset({ taxi, pickup, destination }) {
     name: `nexgo-ride-${Date.now()}`,
     format: 'raw',
     data,
+  });
+}
+
+export async function listMyRideRequests() {
+  try {
+    const result = await apiCall('assets/list/raw', {});
+    if (!Array.isArray(result)) return [];
+
+    return result
+      .map(normalizeRideAsset)
+      .filter(Boolean)
+      .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+  } catch (error) {
+    console.error('Error listing my ride requests:', error);
+    return [];
+  }
+}
+
+export async function fetchRideRequestsForTaxiOwner(ownerGenesis) {
+  try {
+    const result = await apiCall('register/list/assets:raw', {
+      limit: 500,
+    });
+
+    if (!Array.isArray(result)) return [];
+
+    return result
+      .map(normalizeRideAsset)
+      .filter(Boolean)
+      .filter((ride) => ride.taxiOwner === ownerGenesis)
+      .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+  } catch (error) {
+    console.error('Error fetching ride requests:', error);
+    return [];
+  }
+}
+
+export async function updateRideRequestAsset({ address, currentData, updates }) {
+  const nextData = {
+    ...currentData,
+    ...updates,
+  };
+
+  return await secureApiCall('assets/update/asset', {
+    address,
+    format: 'raw',
+    data: JSON.stringify(nextData),
+  });
+}
+
+export async function listOutstandingInvoices() {
+  try {
+    const result = await apiCall('invoices/list/outstanding', {
+      limit: 100,
+    });
+
+    if (!Array.isArray(result)) return [];
+
+    return result.map(normalizeInvoice).filter(Boolean);
+  } catch (error) {
+    console.error('Error listing outstanding invoices:', error);
+    return [];
+  }
+}
+
+export async function createRideInvoice({
+  rideRequest,
+  paymentAccount,
+  amount,
+  description,
+}) {
+  const rideReference = rideRequest.address;
+  const rideDescription = `NexGo ride ride=${rideReference}`;
+  const finalDescription = description
+    ? `${rideDescription} | ${description}`
+    : rideDescription;
+
+  return await secureApiCall('invoices/create/invoice', {
+    name: `nexgo-invoice-${Date.now()}`,
+    account: paymentAccount,
+    recipient: rideRequest.owner,
+    items: [
+      {
+        description: finalDescription,
+        amount: amount.toString(),
+        units: 1,
+      },
+    ],
+  });
+}
+
+export async function payRideInvoice({ invoiceAddress, fromAccount }) {
+  return await secureApiCall('invoices/pay/invoice', {
+    address: invoiceAddress,
+    from: fromAccount,
+  });
+}
+
+export async function cancelRideInvoice(invoiceAddress) {
+  return await secureApiCall('invoices/cancel/invoice', {
+    address: invoiceAddress,
   });
 }
 

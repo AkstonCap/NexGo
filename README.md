@@ -18,6 +18,7 @@ NexGo has two modes, accessible via tabs inside the module:
 - **Search destinations** — Type an address into the search bar (powered by OpenStreetMap/Nominatim) to set your destination and see routing on the map.
 - **Distance sorting** — Available taxis are listed by distance from your current GPS position, with estimated travel times.
 - **Hire on-chain** — Once pickup and destination are set, the passenger can create a decentralized `nexgo-ride` request asset for a selected taxi, including autonomous taxis.
+- **Settle accepted rides** — The passenger can review outstanding ride invoices and pay them directly through the Nexus Invoices API from the module.
 - **Reputation layer** — Drivers and autonomous providers can be rated on-chain through the `nexgo-rating` raw asset standard.
 - The taxi list refreshes every 10 seconds.
 
@@ -30,6 +31,7 @@ NexGo has two modes, accessible via tabs inside the module:
 - **Set your status** — Toggle between **Available** and **Occupied** to let passengers know whether you can accept rides.
 - **Update your asset** — Manually push your current status and location to the blockchain at any time via "Update Asset On-Chain".
 - **Stop broadcasting** — Click "Stop Broadcasting" to set your on-chain status to offline and stop position updates.
+- **Accept requests with invoices** — Review incoming `nexgo-ride` requests, create an invoice for a selected request, and cancel unpaid invoices if needed.
 
 ### 🤖 Autonomous / self-driving providers
 
@@ -54,6 +56,8 @@ Each taxi is stored as a Nexus `asset` register using the JSON format with the f
 Assets are queried network-wide using `register/list/assets:asset` with a WHERE clause filtering on `distordia-type=nexgo-taxi`.
 
 Passenger hire requests are stored as raw assets using the `nexgo-ride` standard. Ratings are stored as raw assets using the `nexgo-rating` standard.
+
+Ride acceptance is represented by invoice issuance: because ride requests remain owned by the passenger's signature chain, the provider accepts by creating an invoice that references the ride, and the passenger updates the ride asset after payment.
 
 ---
 
@@ -115,14 +119,16 @@ When developing, use `nxs_package.dev.json` to point the wallet at your local de
 3. Available taxis appear on the map and in a sorted list below it.
 4. Use the search bar to enter a destination and see a route on the map.
 5. Click **Hire** / **Hire Auto** to create an on-chain ride request for the selected taxi.
-6. Click **Refresh** to manually update the taxi list, or wait for the 10-second auto-refresh.
+6. If the provider accepts, an outstanding invoice appears in the payment section.
+7. Pay the invoice from your configured passenger payment account.
+8. Click **Refresh** to manually update the taxi list, or wait for the 10-second auto-refresh.
 
 ### As an autonomous provider
 
 1. Create a `nexgo-taxi-{vehicleId}` asset directly with `assets/create/asset` using the `JSON` format and the same field names listed above.
 2. Set `service-type=autonomous` and keep `status`, `latitude`, `longitude`, and `timestamp` updated via `assets/update/asset`.
 3. Monitor passenger-created `nexgo-ride-*` raw assets through `register/list/assets:raw`.
-4. Accept jobs and settle payments with the Nexus Invoices API.
+4. Accept jobs by creating invoices that reference the ride asset, and settle payments with the Nexus Invoices API.
 
 ---
 
@@ -135,10 +141,12 @@ When developing, use `nxs_package.dev.json` to point the wallet at your local de
 | `assets/get/asset` | Session | Retrieve a specific taxi asset by name |
 | `assets/list/asset` | Session | List the logged-in driver's taxi assets |
 | `assets/create/asset` + `format=raw` | PIN (secureApiCall) | Create passenger ride requests (`nexgo-ride`) |
+| `assets/list/raw` | Session | List the passenger's own ride requests |
 | `register/list/assets:asset` | Public | Query all taxi assets network-wide (passenger view) |
 | `register/list/assets:raw` | Public | Query rating and ride-request raw assets |
 | `profiles/status/master` | Session | Check if the user is logged in |
 | `invoices/create/invoice` | PIN | Settlement flow for accepted rides (provider side) |
+| `invoices/list/outstanding` | Session | Show unpaid ride invoices for the active user |
 | `invoices/pay/invoice` | PIN | Settlement flow for accepted rides (passenger side) |
 | `invoices/cancel/invoice` | PIN | Cancel unpaid ride invoices |
 

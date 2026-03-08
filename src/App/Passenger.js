@@ -10,14 +10,62 @@ import AsyncSelect from 'react-select/async';
 import Map from 'components/Map';
 import {
   fetchTaxis,
+  setPassengerPaymentAccount,
   setUserPosition,
   fetchRatings,
   loadMyRatings,
   submitRating,
 } from 'actions/actionCreators';
-import { calculateDistance, createRideRequestAsset } from 'api/nexusAPI';
+import {
+  calculateDistance,
+  createRideRequestAsset,
+  extractRideAddressFromInvoice,
+  listMyRideRequests,
+  listOutstandingInvoices,
+  payRideInvoice,
+  updateRideRequestAsset,
+} from 'api/nexusAPI';
 
 const REFRESH_INTERVAL = 10000; // 10 seconds, matching web version
+
+function formatDate(value) {
+  if (!value) return 'Unknown';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return date.toLocaleString();
+}
+
+function statusPill(status) {
+  const normalized = (status || '').toLowerCase();
+
+  if (normalized === 'paid') {
+    return {
+      background: 'rgba(34,197,94,0.15)',
+      color: '#22c55e',
+    };
+  }
+
+  if (normalized === 'cancelled') {
+    return {
+      background: 'rgba(239,68,68,0.15)',
+      color: '#ef4444',
+    };
+  }
+
+  if (normalized === 'outstanding' || normalized === 'invoiced') {
+    return {
+      background: 'rgba(245,158,11,0.15)',
+      color: '#f59e0b',
+    };
+  }
+
+  return {
+    background: 'rgba(99,102,241,0.15)',
+    color: '#6366f1',
+  };
+}
 
 const loadOptions = (inputValue, callback) => {
   fetch(
@@ -94,24 +142,50 @@ export default function Passenger() {
   const [ratingScore, setRatingScore] = useState(3);
   const [ratingAvoid, setRatingAvoid] = useState(false);
   const [hirePendingTaxiId, setHirePendingTaxiId] = useState(null);
+  const [rideRequests, setRideRequests] = useState([]);
+  const [outstandingInvoices, setOutstandingInvoices] = useState([]);
+  const [rideLoading, setRideLoading] = useState(false);
+  const [rideActionPendingId, setRideActionPendingId] = useState(null);
+  const [invoicePendingId, setInvoicePendingId] = useState(null);
   const taxis = useSelector((state) => state.taxi.taxis);
   const loading = useSelector((state) => state.taxi.loading);
   const ratings = useSelector((state) => state.taxi.ratings);
   const myRatings = useSelector((state) => state.taxi.myRatings);
   const ratingPending = useSelector((state) => state.taxi.ratingPending);
+  const passengerPaymentAccount = useSelector(
+    (state) => state.settings.passengerPaymentAccount
+  );
   const userPosition = useSelector((state) => state.ui.userPosition);
   const dispatch = useDispatch();
+
+  const loadRideData = async () => {
+    setRideLoading(true);
+    try {
+      const [rides, invoices] = await Promise.all([
+        listMyRideRequests(),
+        listOutstandingInvoices(),
+      ]);
+      setRideRequests(rides);
+      setOutstandingInvoices(invoices);
+    } catch (error) {
+      console.error('Error loading ride data:', error);
+    } finally {
+      setRideLoading(false);
+    }
+  };
 
   // Load ratings on mount
   useEffect(() => {
     dispatch(fetchRatings());
     dispatch(loadMyRatings());
+    loadRideData();
   }, [dispatch]);
 
   // Auto-refresh taxi list
   useEffect(() => {
     const interval = setInterval(() => {
       dispatch(fetchTaxis());
+      loadRideData();
     }, REFRESH_INTERVAL);
     return () => clearInterval(interval);
   }, [dispatch]);
@@ -119,6 +193,7 @@ export default function Passenger() {
   const handleRefresh = () => {
     dispatch(fetchTaxis());
     dispatch(fetchRatings());
+    loadRideData();
   };
 
   const handleOpenRating = (taxi) => {
@@ -151,6 +226,7 @@ export default function Passenger() {
         destination: {
           lat: destination.value.lat,
           lng: destination.value.lon,
+          label: destination.label,
         },
       });
 
@@ -160,12 +236,75 @@ export default function Passenger() {
             ? 'Autonomous taxi hire request created on-chain.'
             : 'Ride request created on-chain for the selected taxi.',
       });
+      loadRideData();
     } catch (error) {
       showErrorDialog({
         message: `Failed to create ride request: ${error.message}`,
       });
     } finally {
       setHirePendingTaxiId(null);
+    }
+  };
+
+  const handleCancelRideRequest = async (ride) => {
+    setRideActionPendingId(ride.address);
+    try {
+      await updateRideRequestAsset({
+        address: ride.address,
+        currentData: ride.raw,
+        updates: {
+          status: 'cancelled',
+          'cancelled-at': new Date().toISOString(),
+          'invoice-status': ride.invoiceStatus || '',
+        },
+      });
+      showSuccessDialog({ message: 'Ride request cancelled on-chain.' });
+      loadRideData();
+    } catch (error) {
+      showErrorDialog({
+        message: `Failed to cancel ride request: ${error.message}`,
+      });
+    } finally {
+      setRideActionPendingId(null);
+    }
+  };
+
+  const handlePayInvoice = async (invoice, ride) => {
+    if (!passengerPaymentAccount) {
+      showErrorDialog({
+        message: 'Enter the passenger payment account before paying invoices.',
+      });
+      return;
+    }
+
+    setInvoicePendingId(invoice.address);
+    try {
+      await payRideInvoice({
+        invoiceAddress: invoice.address,
+        fromAccount: passengerPaymentAccount,
+      });
+
+      if (ride) {
+        await updateRideRequestAsset({
+          address: ride.address,
+          currentData: ride.raw,
+          updates: {
+            status: 'paid',
+            'invoice-address': invoice.address,
+            'invoice-status': 'PAID',
+            'paid-at': new Date().toISOString(),
+          },
+        });
+      }
+
+      showSuccessDialog({ message: 'Invoice paid and ride marked as paid.' });
+      loadRideData();
+    } catch (error) {
+      showErrorDialog({
+        message: `Failed to pay invoice: ${error.message}`,
+      });
+    } finally {
+      setInvoicePendingId(null);
     }
   };
 
@@ -201,6 +340,14 @@ export default function Passenger() {
     if (b.distance === null) return -1;
     return a.distance - b.distance;
   });
+
+  const invoicesByRideAddress = outstandingInvoices.reduce((acc, invoice) => {
+    const rideAddress = extractRideAddressFromInvoice(invoice);
+    if (rideAddress && !acc[rideAddress]) {
+      acc[rideAddress] = invoice;
+    }
+    return acc;
+  }, {});
 
   return (
     <>
@@ -430,6 +577,165 @@ export default function Passenger() {
                         Rating is stored on-chain as a raw asset (nexgo-rating standard).
                         {Object.keys(myRatings).length === 0 && ' First rating creates the asset (2 NXS).'}
                       </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </FieldSet>
+      </div>
+
+      <div style={{ marginTop: 16 }}>
+        <FieldSet legend="My Ride Requests & Payments">
+          <div style={{ marginBottom: 12 }}>
+            <label style={{ display: 'block', marginBottom: 4, fontWeight: 500 }}>
+              Passenger Payment Account
+            </label>
+            <input
+              value={passengerPaymentAccount}
+              onChange={(e) =>
+                dispatch(setPassengerPaymentAccount(e.target.value))
+              }
+              placeholder="username:my-nxs-account"
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                borderRadius: 4,
+                border: '1px solid rgba(128,128,128,0.3)',
+                background: 'inherit',
+                color: 'inherit',
+                fontSize: 14,
+              }}
+            />
+            <div style={{ fontSize: 11, opacity: 0.55, marginTop: 4 }}>
+              Used for `invoices/pay/invoice` when settling an accepted ride.
+            </div>
+          </div>
+
+          {rideLoading && rideRequests.length === 0 && (
+            <div style={{ fontSize: 13, opacity: 0.6 }}>Loading ride requests...</div>
+          )}
+
+          {!rideLoading && rideRequests.length === 0 && (
+            <div style={{ fontSize: 13, opacity: 0.6 }}>
+              No ride requests yet. Hire a taxi above to create one on-chain.
+            </div>
+          )}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {rideRequests.map((ride) => {
+              const invoice = invoicesByRideAddress[ride.address] || null;
+              const effectiveStatus =
+                ride.status === 'paid'
+                  ? 'paid'
+                  : ride.status === 'cancelled'
+                    ? 'cancelled'
+                    : invoice
+                      ? 'outstanding'
+                      : ride.status;
+              const pill = statusPill(effectiveStatus);
+              const tripDistance = calculateDistance(
+                { lat: ride.pickupLat, lng: ride.pickupLng },
+                { lat: ride.destinationLat, lng: ride.destinationLng }
+              );
+
+              return (
+                <div
+                  key={ride.address}
+                  style={{
+                    padding: 12,
+                    borderRadius: 8,
+                    border: '1px solid rgba(128,128,128,0.2)',
+                    background: 'rgba(99,102,241,0.04)',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: 12,
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontWeight: 600 }}>
+                        {ride.vehicleId || 'Requested taxi'}
+                      </div>
+                      <div style={{ fontSize: 12, opacity: 0.65 }}>
+                        {ride.serviceType === 'autonomous'
+                          ? 'Autonomous provider'
+                          : 'Human driver'}{' '}
+                        • {tripDistance.toFixed(1)} km direct trip
+                      </div>
+                    </div>
+                    <span
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: 999,
+                        fontSize: 12,
+                        fontWeight: 600,
+                        background: pill.background,
+                        color: pill.color,
+                      }}
+                    >
+                      {effectiveStatus}
+                    </span>
+                  </div>
+
+                  <div style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>
+                    Created: {formatDate(ride.createdAt)}
+                  </div>
+                  <div style={{ fontSize: 12, marginTop: 6 }}>
+                    Pickup: {ride.pickupLabel || `${ride.pickupLat.toFixed(5)}, ${ride.pickupLng.toFixed(5)}`}
+                  </div>
+                  <div style={{ fontSize: 12, marginTop: 2 }}>
+                    Destination: {ride.destinationLabel || `${ride.destinationLat.toFixed(5)}, ${ride.destinationLng.toFixed(5)}`}
+                  </div>
+
+                  {invoice && (
+                    <div
+                      style={{
+                        marginTop: 10,
+                        padding: 10,
+                        borderRadius: 8,
+                        background: 'rgba(245,158,11,0.08)',
+                        border: '1px solid rgba(245,158,11,0.2)',
+                      }}
+                    >
+                      <div style={{ fontSize: 13, fontWeight: 600 }}>
+                        Outstanding Invoice
+                      </div>
+                      <div style={{ fontSize: 12, marginTop: 4 }}>
+                        Amount: {invoice.amount} NXS
+                      </div>
+                      <div style={{ fontSize: 12, marginTop: 2 }}>
+                        Payment account: {invoice.account}
+                      </div>
+                      <div style={{ fontSize: 11, opacity: 0.6, marginTop: 4 }}>
+                        Invoice address: {invoice.address}
+                      </div>
+                      <Button
+                        onClick={() => handlePayInvoice(invoice, ride)}
+                        disabled={invoicePendingId === invoice.address}
+                        style={{ marginTop: 8, fontSize: 12, padding: '4px 12px' }}
+                      >
+                        {invoicePendingId === invoice.address ? 'Paying...' : 'Pay Invoice'}
+                      </Button>
+                    </div>
+                  )}
+
+                  {!invoice && ride.status !== 'paid' && ride.status !== 'cancelled' && (
+                    <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                      <Button
+                        onClick={() => handleCancelRideRequest(ride)}
+                        disabled={rideActionPendingId === ride.address}
+                        style={{ fontSize: 12, padding: '4px 12px' }}
+                      >
+                        {rideActionPendingId === ride.address
+                          ? 'Cancelling...'
+                          : 'Cancel Request'}
+                      </Button>
                     </div>
                   )}
                 </div>

@@ -148,7 +148,7 @@ Passenger ratings follow the Distordia `nexgo-rating` standard. Assets are creat
 
 ### Contractual Ride Flow (Partially Implemented - Using Nexus Invoices API)
 
-The decentralized ride flow uses Assets for state and Invoices for payment. The current code already creates passenger ride-request assets; acceptance and settlement remain the next integration step.
+The decentralized ride flow uses Assets for state and Invoices for payment. The current code supports passenger ride-request creation, provider invoice issuance, passenger invoice payment, and ride status finalization by the passenger.
 
 1. **Passenger creates ride request asset** (`nexgo-ride` standard, raw format):
    ```json
@@ -163,7 +163,7 @@ The decentralized ride flow uses Assets for state and Invoices for payment. The 
    ```
    Asset name: `nexgo-ride-{timestamp}` (local to passenger's sig chain).
 
-2. **Driver accepts ride**: Driver updates their taxi asset status to `occupied` and the passenger updates the ride asset with the driver's genesis and status `accepted`.
+2. **Driver / provider accepts ride**: Provider watches ride requests targeted at their taxi, updates the taxi asset status to `occupied`, and creates an invoice referencing the ride asset. Because the ride asset is passenger-owned, invoice issuance is the acceptance signal visible to both sides.
 
 3. **Driver creates invoice** via `invoices/create/invoice`:
    - `recipient`: passenger's genesis/username
@@ -174,7 +174,7 @@ The decentralized ride flow uses Assets for state and Invoices for payment. The 
 4. **Passenger pays invoice** via `invoices/pay/invoice`:
    - `from`: passenger's NXS account
    - Payment is atomic: DEBIT (payment) + CLAIM (invoice ownership transfer) happen in one transaction.
-   - On success, ride asset status becomes `paid`.
+  - On success, the passenger updates their ride asset status to `paid`.
 
 5. **Ride completion**: Driver updates taxi asset back to `available`. Passenger can rate the driver via the rating system.
 
@@ -199,13 +199,15 @@ All operations are on-chain and decentralized. The Invoice API handles condition
 | `assets/update/asset` | Update taxi position/status or rating data | Yes (PIN) |
 | `assets/get/asset` | Get specific taxi or rating asset by name | No |
 | `assets/list/asset` | List user's own taxi assets | Yes |
+| `assets/list/raw` | List user's own raw assets (used for passenger rides) | Yes |
 | `register/list/assets:asset` | List all taxi assets globally | No |
 | `register/list/assets:raw` | List all raw assets globally (for ratings and rides) | No |
 | `profiles/status/master` | Check if user is logged in | Yes |
-| `invoices/create/invoice` | Create ride invoice (future) | Yes (PIN) |
-| `invoices/pay/invoice` | Pay ride invoice (future) | Yes (PIN) |
-| `invoices/cancel/invoice` | Cancel unpaid invoice (future) | Yes (PIN) |
-| `invoices/get/invoice` | Get invoice details (future) | No |
+| `invoices/create/invoice` | Create ride invoice | Yes (PIN) |
+| `invoices/list/outstanding` | List outstanding ride invoices for current user | Yes |
+| `invoices/pay/invoice` | Pay ride invoice | Yes (PIN) |
+| `invoices/cancel/invoice` | Cancel unpaid invoice | Yes (PIN) |
+| `invoices/get/invoice` | Get invoice details | No |
 
 ### Persistence
 
@@ -266,7 +268,7 @@ import { createTaxiAsset } from 'api/nexusAPI';
 - No linter configured (no ESLint)
 - No CI/CD pipeline
 - No user authentication beyond wallet connection
-- Passenger ride requests are implemented, but driver / autonomous acceptance and invoice settlement are not yet wired into the UI
+- Provider acceptance is represented by invoice issuance rather than the provider mutating the passenger-owned ride asset directly
 - Rating asset query fetches all raw assets on chain (could be slow with many raw assets; filtering by data content may improve this in future)
 - Driver location updates are manual (secureApiCall requires PIN input per update)
 

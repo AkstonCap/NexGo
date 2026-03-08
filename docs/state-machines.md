@@ -110,6 +110,8 @@ stateDiagram-v2
     [*] --> LoadingPassengerData : Tab active
     LoadingPassengerData : fetchRatings()
     LoadingPassengerData : loadMyRatings()
+    LoadingPassengerData : listMyRideRequests()
+    LoadingPassengerData : invoices/list/outstanding
     LoadingPassengerData --> Idle
 
     state Idle {
@@ -150,6 +152,17 @@ stateDiagram-v2
 
     CreatingRideRequest --> DestinationSelected : Success\nshowSuccessDialog()
     CreatingRideRequest --> DestinationSelected : Error\nshowErrorDialog()
+
+    DestinationSelected --> PayingInvoice : Passenger sees\noutstanding ride invoice
+
+    state PayingInvoice {
+        [*] --> Paying
+        Paying : API: invoices/pay/invoice
+        Paying : API: assets/update/asset\nformat=raw status=paid
+    }
+
+    PayingInvoice --> DestinationSelected : Success\nshowSuccessDialog()
+    PayingInvoice --> DestinationSelected : Error\nshowErrorDialog()
 
     DestinationSelected --> SearchingDestination : User changes\ndestination
     DestinationSelected --> Idle : User clears\ndestination
@@ -278,31 +291,30 @@ stateDiagram-v2
 
 ## 7. Decentralized Hire + Settlement Flow
 
-This is the intended end-to-end decentralized service flow aligned with the Nexus Assets and Invoices APIs. The current code implements discovery, rating, and passenger ride-request creation. Acceptance, invoicing, and settlement remain the next integration step.
+This is the implemented decentralized service flow aligned with the Nexus Assets and Invoices APIs. Because the ride request raw asset is owned by the passenger, provider acceptance is represented by invoice issuance plus the provider setting the taxi status to `occupied`.
 
 ```mermaid
 stateDiagram-v2
     [*] --> TaxiPublished
 
     TaxiPublished --> RideRequested : Passenger creates\nnexgo-ride raw asset
-    RideRequested --> AcceptedByHuman : Driver agent watches requests\nand accepts off-chain or via API
-    RideRequested --> AcceptedByAutonomous : Autonomous fleet agent\nwatches requests via API
-
-    AcceptedByHuman --> InvoiceCreated
-    AcceptedByAutonomous --> InvoiceCreated
+    RideRequested --> AcceptedByHuman : Driver creates invoice\nand sets taxi occupied
+    RideRequested --> AcceptedByAutonomous : Autonomous fleet agent\ncreates invoice via API
 
     state InvoiceCreated {
         [*] --> Outstanding
         Outstanding : API: invoices/create/invoice
         Outstanding : recipient = passenger genesis
         Outstanding : account = provider payment account
+        Outstanding : line item description\ncontains ride=<ride-address>
     }
 
     InvoiceCreated --> Paid : Passenger pays\ninvoices/pay/invoice
     InvoiceCreated --> Cancelled : Provider cancels\ninvoices/cancel/invoice
-    Paid --> Completed : Taxi status returns to available\nPassenger can rate provider
+    Paid --> Completed : Passenger updates ride raw asset\nstatus = paid
+    Completed --> AvailableAgain : Taxi status returns to available\nPassenger can rate provider
     Cancelled --> [*]
-    Completed --> [*]
+    AvailableAgain --> [*]
 ```
 
 ---
